@@ -757,7 +757,8 @@ func (c *Chaos) tryDistributeBlockFee(chain consensus.ChainHeaderReader, header 
 	state.SetBalance(consensus.FeeRecoder, common.Big0)
 
 	return systemcontract.DistributeBlockFee(&systemcontract.CallContext{
-		Statedb:      state,
+		Statedb: state,
+
 		Header:       header,
 		ChainContext: newChainContext(chain, c),
 		ChainConfig:  c.chainConfig,
