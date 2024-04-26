@@ -403,4 +403,4 @@ func (b *backendMock) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent)
 	return nil
 }
 
-func (b *backendMock) Engine() consensus.Engine { return nil }
+func (b *backendMock) Engine() consensus.ConsensusEngine { return nil }

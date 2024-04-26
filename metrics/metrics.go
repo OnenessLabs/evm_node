@@ -79,6 +79,21 @@ func init() {
 	}
 }
 
+// NewMeterForced constructs a new StandardMeter and launches a goroutine no matter
+// the global switch is enabled or not.
+// Be sure to call Stop() once the meter is of no use to allow for garbage collection.
+func NewMeterForced() Meter {
+	m := newStandardMeter()
+	arbiter.Lock()
+	defer arbiter.Unlock()
+	arbiter.meters[m] = struct{}{}
+	if !arbiter.started {
+		arbiter.started = true
+		go arbiter.tick()
+	}
+	return m
+}
+
 var threadCreateProfile = pprof.Lookup("threadcreate")
 
 type runtimeStats struct {

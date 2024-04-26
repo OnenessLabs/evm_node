@@ -28,7 +28,7 @@ import (
 // It can not be used to test the merge transition.
 // This type is needed since the fakeChainReader can not be used with
 // a normal beacon consensus engine.
-func NewFaker() consensus.Engine {
+func NewFaker() consensus.ConsensusEngine {
 	return new(faker)
 }
 

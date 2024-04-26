@@ -433,7 +433,7 @@ type testBackend struct {
 	acc     accounts.Account
 }
 
-func newTestBackend(t *testing.T, n int, gspec *core.Genesis, engine consensus.Engine, generator func(i int, b *core.BlockGen)) *testBackend {
+func newTestBackend(t *testing.T, n int, gspec *core.Genesis, engine consensus.ConsensusEngine, generator func(i int, b *core.BlockGen)) *testBackend {
 	var (
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:    256,
@@ -604,8 +604,8 @@ func (b testBackend) TxPoolContentFrom(addr common.Address) ([]*types.Transactio
 func (b testBackend) SubscribeNewTxsEvent(events chan<- core.NewTxsEvent) event.Subscription {
 	panic("implement me")
 }
-func (b testBackend) ChainConfig() *params.ChainConfig { return b.chain.Config() }
-func (b testBackend) Engine() consensus.Engine         { return b.chain.Engine() }
+func (b testBackend) ChainConfig() *params.ChainConfig  { return b.chain.Config() }
+func (b testBackend) Engine() consensus.ConsensusEngine { return b.chain.Engine() }
 func (b testBackend) GetLogs(ctx context.Context, blockHash common.Hash, number uint64) ([][]*types.Log, error) {
 	panic("implement me")
 }
@@ -856,7 +856,7 @@ func TestCall(t *testing.T) {
 			expectErr: nil,
 			want:      "0x",
 		},
-		// Call which can only succeed if state is state overridden
+		// Call2 which can only succeed if state is state overridden
 		{
 			blockNumber: rpc.LatestBlockNumber,
 			call: TransactionArgs{

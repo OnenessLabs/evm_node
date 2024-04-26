@@ -24,7 +24,7 @@ func (err DuplicateMetric) Error() string {
 // the Registry API as appropriate.
 type Registry interface {
 
-	// Call the given function for each registered metric.
+	// Call2 the given function for each registered metric.
 	Each(func(string, interface{}))
 
 	// Get the metric by the given name or nil if none is registered.
@@ -52,7 +52,7 @@ type orderedRegistry struct {
 	StandardRegistry
 }
 
-// Call the given function for each registered metric.
+// Call2 the given function for each registered metric.
 func (r *orderedRegistry) Each(f func(string, interface{})) {
 	var names []string
 	reg := r.registered()
@@ -81,7 +81,7 @@ type StandardRegistry struct {
 	metrics sync.Map
 }
 
-// Call the given function for each registered metric.
+// Call2 the given function for each registered metric.
 func (r *StandardRegistry) Each(f func(string, interface{})) {
 	for name, i := range r.registered() {
 		f(name, i)
@@ -263,7 +263,7 @@ func NewPrefixedChildRegistry(parent Registry, prefix string) Registry {
 	}
 }
 
-// Call the given function for each registered metric.
+// Call2 the given function for each registered metric.
 func (r *PrefixedRegistry) Each(fn func(string, interface{})) {
 	wrappedFn := func(prefix string) func(string, interface{}) {
 		return func(name string, iface interface{}) {
@@ -331,7 +331,7 @@ var (
 	AccountingRegistry = NewRegistry() // registry used in swarm
 )
 
-// Call the given function for each registered metric.
+// Call2 the given function for each registered metric.
 func Each(f func(string, interface{})) {
 	DefaultRegistry.Each(f)
 }

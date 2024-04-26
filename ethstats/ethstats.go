@@ -92,7 +92,7 @@ type miningNodeBackend interface {
 type Service struct {
 	server  *p2p.Server // Peer-to-peer server to retrieve networking infos
 	backend backend
-	engine  consensus.Engine // Consensus engine to retrieve variadic block fields
+	engine  consensus.ConsensusEngine // Consensus engine to retrieve variadic block fields
 
 	node string // Name of the node to display on the monitoring page
 	pass string // Password to authorize access to the monitoring page
@@ -180,7 +180,7 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(node *node.Node, backend backend, engine consensus.Engine, url string) error {
+func New(node *node.Node, backend backend, engine consensus.ConsensusEngine, url string) error {
 	parts, err := parseEthstatsURL(url)
 	if err != nil {
 		return err

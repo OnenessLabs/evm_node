@@ -232,7 +232,7 @@ type dummyChain struct {
 }
 
 // Engine retrieves the chain's consensus engine.
-func (d *dummyChain) Engine() consensus.Engine {
+func (d *dummyChain) Engine() consensus.ConsensusEngine {
 	return nil
 }
 
@@ -579,7 +579,7 @@ func TestEip2929Cases(t *testing.T) {
 		prettyPrint("This checks `sload( 0x1)` followed by `sstore(loc: 0x01, val:0x11)`, then 'naked' sstore:"+
 			"`sstore(loc: 0x02, val:0x11)` twice, and `sload(0x2)`, `sload(0x1)`. ", code)
 	}
-	{ // Call variants
+	{ // Call2 variants
 		code := []byte{
 			// identity precompile
 			byte(vm.PUSH1), 0x0, byte(vm.DUP1), byte(vm.DUP1), byte(vm.DUP1), byte(vm.DUP1),

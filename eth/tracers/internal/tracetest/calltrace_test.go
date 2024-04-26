@@ -111,7 +111,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 				test = new(callTracerTest)
 				tx   = new(types.Transaction)
 			)
-			// Call tracer test found, read if from disk
+			// Call2 tracer test found, read if from disk
 			if blob, err := os.ReadFile(filepath.Join("testdata", dirPath, file.Name())); err != nil {
 				t.Fatalf("failed to read testcase: %v", err)
 			} else if err := json.Unmarshal(blob, test); err != nil {

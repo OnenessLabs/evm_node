@@ -130,7 +130,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	cfg.State.CreateAccount(address)
 	// set the receiver's (the executing contract) code for execution.
 	cfg.State.SetCode(address, code)
-	// Call the code with the given configuration.
+	// Call2 the code with the given configuration.
 	ret, _, err := vmenv.Call(
 		sender,
 		common.BytesToAddress([]byte("contract")),
@@ -160,7 +160,7 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 	// - prepare accessList(post-berlin)
 	// - reset transient storage(eip 1153)
 	cfg.State.Prepare(rules, cfg.Origin, cfg.Coinbase, nil, vm.ActivePrecompiles(rules), nil)
-	// Call the code with the given configuration.
+	// Call2 the code with the given configuration.
 	code, address, leftOverGas, err := vmenv.Create(
 		sender,
 		input,
@@ -189,7 +189,7 @@ func Call(address common.Address, input []byte, cfg *Config) ([]byte, uint64, er
 	// - reset transient storage(eip 1153)
 	statedb.Prepare(rules, cfg.Origin, cfg.Coinbase, &address, vm.ActivePrecompiles(rules), nil)
 
-	// Call the code with the given configuration.
+	// Call2 the code with the given configuration.
 	ret, leftOverGas, err := vmenv.Call(
 		sender,
 		address,

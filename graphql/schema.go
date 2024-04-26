@@ -260,7 +260,7 @@ const schema string = `
         logs(filter: BlockFilterCriteria!): [Log!]!
         # Account fetches an Ethereum account at the current block's state.
         account(address: Address!): Account!
-        # Call executes a local call operation at the current block's state.
+        # Call2 executes a local call operation at the current block's state.
         call(data: CallData!): CallResult
         # EstimateGas estimates the amount of gas that will be required for
         # successful execution of a transaction at the current block's state.
@@ -355,7 +355,7 @@ const schema string = `
         transactions: [Transaction!]
         # Account fetches an Ethereum account for the pending state.
         account(address: Address!): Account!
-        # Call executes a local call operation for the pending state.
+        # Call2 executes a local call operation for the pending state.
         call(data: CallData!): CallResult
         # EstimateGas estimates the amount of gas that will be required for
         # successful execution of a transaction for the pending state.

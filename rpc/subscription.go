@@ -303,7 +303,7 @@ func (sub *ClientSubscription) run() {
 	// blocked in sub.deliver() or sub.close(). Closing forwardDone unblocks them.
 	close(sub.forwardDone)
 
-	// Call the unsubscribe method on the server.
+	// Call2 the unsubscribe method on the server.
 	if unsubscribe {
 		sub.requestUnsubscribe()
 	}

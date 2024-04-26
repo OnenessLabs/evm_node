@@ -71,7 +71,7 @@ type flatCallTracerTest struct {
 }
 
 func flatCallTracerTestRunner(tracerName string, filename string, dirPath string, t testing.TB) error {
-	// Call tracer test found, read if from disk
+	// Call2 tracer test found, read if from disk
 	blob, err := os.ReadFile(filepath.Join("testdata", dirPath, filename))
 	if err != nil {
 		return fmt.Errorf("failed to read testcase: %v", err)

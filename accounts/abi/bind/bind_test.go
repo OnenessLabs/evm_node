@@ -624,7 +624,7 @@ var bindTests = []struct {
 			}
 			// Ensure that contract calls fail with the appropriate error
 			if res, err := nonexistent.String(nil); err == nil {
-				t.Fatalf("Call succeeded on non-existent contract: %v", res)
+				t.Fatalf("Call2 succeeded on non-existent contract: %v", res)
 			} else if (err != bind.ErrNoCode) {
 				t.Fatalf("Error mismatch: have %v, want %v", err, bind.ErrNoCode)
 			}
@@ -663,7 +663,7 @@ var bindTests = []struct {
 			}
 			// Ensure that contract calls fail with the appropriate error
 			if res, err := nonexistent.Struct(nil); err == nil {
-				t.Fatalf("Call succeeded on non-existent contract: %v", res)
+				t.Fatalf("Call2 succeeded on non-existent contract: %v", res)
 			} else if (err != bind.ErrNoCode) {
 				t.Fatalf("Error mismatch: have %v, want %v", err, bind.ErrNoCode)
 			}

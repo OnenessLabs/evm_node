@@ -244,7 +244,7 @@ func (op basicOp) genDecode(ctx *genContext) (string, string) {
 		method = fmt.Sprintf("%s%d", op.decMethod, sizes.Sizeof(op.typ)*8)
 	}
 
-	// Call the decoder method.
+	// Call2 the decoder method.
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s, err := dec.%s()\n", resultV, method)
 	fmt.Fprintf(&b, "if err != nil { return err }\n")

@@ -71,12 +71,12 @@ type HeaderChain struct {
 	procInterrupt func() bool
 
 	rand   *mrand.Rand
-	engine consensus.Engine
+	engine consensus.ConsensusEngine
 }
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
 // to the parent's interrupt semaphore.
-func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine consensus.Engine, procInterrupt func() bool) (*HeaderChain, error) {
+func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine consensus.ConsensusEngine, procInterrupt func() bool) (*HeaderChain, error) {
 	// Seed a fast but crypto originating random generator
 	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 	if err != nil {
@@ -669,7 +669,7 @@ func (hc *HeaderChain) SetGenesis(head *types.Header) {
 func (hc *HeaderChain) Config() *params.ChainConfig { return hc.config }
 
 // Engine retrieves the header chain's consensus engine.
-func (hc *HeaderChain) Engine() consensus.Engine { return hc.engine }
+func (hc *HeaderChain) Engine() consensus.ConsensusEngine { return hc.engine }
 
 // GetBlock implements consensus.ChainReader, and returns nil for every input as
 // a header chain does not have blocks available for retrieval.

@@ -56,7 +56,7 @@ type snapshotTestBasic struct {
 	ancient string
 	db      ethdb.Database
 	genDb   ethdb.Database
-	engine  consensus.Engine
+	engine  consensus.ConsensusEngine
 	gspec   *Genesis
 }
 

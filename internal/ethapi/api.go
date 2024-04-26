@@ -1046,7 +1046,7 @@ func (diff *BlockOverrides) Apply(blockCtx *vm.BlockContext) {
 
 // ChainContextBackend provides methods required to implement ChainContext.
 type ChainContextBackend interface {
-	Engine() consensus.Engine
+	Engine() consensus.ConsensusEngine
 	HeaderByNumber(context.Context, rpc.BlockNumber) (*types.Header, error)
 }
 
@@ -1062,7 +1062,7 @@ func NewChainContext(ctx context.Context, backend ChainContextBackend) *ChainCon
 	return &ChainContext{ctx: ctx, b: backend}
 }
 
-func (context *ChainContext) Engine() consensus.Engine {
+func (context *ChainContext) Engine() consensus.ConsensusEngine {
 	return context.b.Engine()
 }
 
@@ -1150,6 +1150,22 @@ func (s *BlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrO
 		blockNrOrHash = &latest
 	}
 	result, err := DoCall(ctx, s.b, args, *blockNrOrHash, overrides, blockOverrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
+	if err != nil {
+		return nil, err
+	}
+	// If the result contains a revert reason, try to unpack and return it.
+	if len(result.Revert()) > 0 {
+		return nil, newRevertError(result.Revert())
+	}
+	return result.Return(), result.Err
+}
+
+func (s *BlockChainAPI) Call2(ctx context.Context, args TransactionArgs, blockNrOrHash *rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
+	if blockNrOrHash == nil {
+		latest := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
+		blockNrOrHash = &latest
+	}
+	result, err := DoCall(ctx, s.b, args, *blockNrOrHash, overrides, nil, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
 	if err != nil {
 		return nil, err
 	}

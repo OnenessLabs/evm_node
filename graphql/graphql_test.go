@@ -453,7 +453,7 @@ func newGQLService(t *testing.T, stack *node.Node, shanghai bool, gspec *core.Ge
 		TrieTimeout:    60 * time.Minute,
 		SnapshotCache:  5,
 	}
-	var engine consensus.Engine = ethash.NewFaker()
+	var engine consensus.ConsensusEngine = ethash.NewFaker()
 	if shanghai {
 		engine = beacon.NewFaker()
 		chainCfg := gspec.Config

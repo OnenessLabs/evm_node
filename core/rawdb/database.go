@@ -479,6 +479,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		bloomBits       stat
 		beaconHeaders   stat
 		cliqueSnaps     stat
+		oasysSnaps      stat
 
 		// Les statistic
 		chtTrieNodes   stat
@@ -541,6 +542,8 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 			beaconHeaders.Add(size)
 		case bytes.HasPrefix(key, CliqueSnapshotPrefix) && len(key) == 7+common.HashLength:
 			cliqueSnaps.Add(size)
+		case bytes.HasPrefix(key, OasysSnapshotPrefix) && len(key) == 7+common.HashLength:
+			oasysSnaps.Add(size)
 		case bytes.HasPrefix(key, ChtTablePrefix) ||
 			bytes.HasPrefix(key, ChtIndexTablePrefix) ||
 			bytes.HasPrefix(key, ChtPrefix): // Canonical hash trie

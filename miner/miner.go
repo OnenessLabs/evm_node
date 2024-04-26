@@ -72,7 +72,7 @@ var DefaultConfig = Config{
 type Miner struct {
 	mux     *event.TypeMux
 	eth     Backend
-	engine  consensus.Engine
+	engine  consensus.ConsensusEngine
 	exitCh  chan struct{}
 	startCh chan struct{}
 	stopCh  chan struct{}
@@ -81,7 +81,7 @@ type Miner struct {
 	wg sync.WaitGroup
 }
 
-func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(header *types.Header) bool) *Miner {
+func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.ConsensusEngine, isLocalBlock func(header *types.Header) bool) *Miner {
 	miner := &Miner{
 		mux:     mux,
 		eth:     eth,

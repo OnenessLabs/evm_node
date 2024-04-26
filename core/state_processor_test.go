@@ -357,7 +357,7 @@ func TestStateProcessorErrors(t *testing.T) {
 // valid, and no proper post-state can be made. But from the perspective of the blockchain, the block is sufficiently
 // valid to be considered for import:
 // - valid pow (fake), ancestry, difficulty, gaslimit etc
-func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Transactions, config *params.ChainConfig) *types.Block {
+func GenerateBadBlock(parent *types.Block, engine consensus.ConsensusEngine, txs types.Transactions, config *params.ChainConfig) *types.Block {
 	difficulty := big.NewInt(0)
 	if !config.TerminalTotalDifficultyPassed {
 		fakeChainReader := newChainMaker(nil, config, engine)

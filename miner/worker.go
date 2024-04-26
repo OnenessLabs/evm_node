@@ -175,7 +175,7 @@ type intervalAdjust struct {
 type worker struct {
 	config      *Config
 	chainConfig *params.ChainConfig
-	engine      consensus.Engine
+	engine      consensus.ConsensusEngine
 	eth         Backend
 	chain       *core.BlockChain
 
@@ -242,7 +242,7 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.ConsensusEngine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,

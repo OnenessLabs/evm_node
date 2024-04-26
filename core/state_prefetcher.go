@@ -30,13 +30,13 @@ import (
 // of an arbitrary state with the goal of prefetching potentially useful state
 // data from disk before the main block processor start executing.
 type statePrefetcher struct {
-	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical block chain
-	engine consensus.Engine    // Consensus engine used for block rewards
+	config *params.ChainConfig       // Chain configuration options
+	bc     *BlockChain               // Canonical block chain
+	engine consensus.ConsensusEngine // Consensus engine used for block rewards
 }
 
 // newStatePrefetcher initialises a new statePrefetcher.
-func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *statePrefetcher {
+func newStatePrefetcher(config *params.ChainConfig, bc *BlockChain, engine consensus.ConsensusEngine) *statePrefetcher {
 	return &statePrefetcher{
 		config: config,
 		bc:     bc,

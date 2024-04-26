@@ -197,7 +197,7 @@ var (
 	// with pre-set call and transact options.
 	type {{.Type}}Session struct {
 	  Contract     *{{.Type}}        // Generic contract binding to set the session for
-	  CallOpts     bind.CallOpts     // Call options to use throughout this session
+	  CallOpts     bind.CallOpts     // Call2 options to use throughout this session
 	  TransactOpts bind.TransactOpts // Transaction auth options to use throughout this session
 	}
 
@@ -205,7 +205,7 @@ var (
 	// with pre-set call options.
 	type {{.Type}}CallerSession struct {
 	  Contract *{{.Type}}Caller // Generic contract caller binding to set the session for
-	  CallOpts bind.CallOpts    // Call options to use throughout this session
+	  CallOpts bind.CallOpts    // Call2 options to use throughout this session
 	}
 
 	// {{.Type}}TransactorSession is an auto generated write-only Go binding around an Ethereum contract,
@@ -275,12 +275,12 @@ var (
 	  return bind.NewBoundContract(address, *parsed, caller, transactor, filterer), nil
 	}
 
-	// Call invokes the (constant) contract method with params as input values and
+	// Call2 invokes the (constant) contract method with params as input values and
 	// sets the output to result. The result type might be a single field for simple
 	// returns, a slice of interfaces for anonymous returns and a struct for named
 	// returns.
-	func (_{{$contract.Type}} *{{$contract.Type}}Raw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
-		return _{{$contract.Type}}.Contract.{{$contract.Type}}Caller.contract.Call(opts, result, method, params...)
+	func (_{{$contract.Type}} *{{$contract.Type}}Raw) Call2(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
+		return _{{$contract.Type}}.Contract.{{$contract.Type}}Caller.contract.Call2(opts, result, method, params...)
 	}
 
 	// Transfer initiates a plain transaction to move funds to the contract, calling
@@ -294,12 +294,12 @@ var (
 		return _{{$contract.Type}}.Contract.{{$contract.Type}}Transactor.contract.Transact(opts, method, params...)
 	}
 
-	// Call invokes the (constant) contract method with params as input values and
+	// Call2 invokes the (constant) contract method with params as input values and
 	// sets the output to result. The result type might be a single field for simple
 	// returns, a slice of interfaces for anonymous returns and a struct for named
 	// returns.
-	func (_{{$contract.Type}} *{{$contract.Type}}CallerRaw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
-		return _{{$contract.Type}}.Contract.contract.Call(opts, result, method, params...)
+	func (_{{$contract.Type}} *{{$contract.Type}}CallerRaw) Call2(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
+		return _{{$contract.Type}}.Contract.contract.Call2(opts, result, method, params...)
 	}
 
 	// Transfer initiates a plain transaction to move funds to the contract, calling
@@ -319,7 +319,7 @@ var (
 		// Solidity: {{.Original.String}}
 		func (_{{$contract.Type}} *{{$contract.Type}}Caller) {{.Normalized.Name}}(opts *bind.CallOpts {{range .Normalized.Inputs}}, {{.Name}} {{bindtype .Type $structs}} {{end}}) ({{if .Structured}}struct{ {{range .Normalized.Outputs}}{{.Name}} {{bindtype .Type $structs}};{{end}} },{{else}}{{range .Normalized.Outputs}}{{bindtype .Type $structs}},{{end}}{{end}} error) {
 			var out []interface{}
-			err := _{{$contract.Type}}.contract.Call(opts, &out, "{{.Original.Name}}" {{range .Normalized.Inputs}}, {{.Name}}{{end}})
+			err := _{{$contract.Type}}.contract.Call2(opts, &out, "{{.Original.Name}}" {{range .Normalized.Inputs}}, {{.Name}}{{end}})
 			{{if .Structured}}
 			outstruct := new(struct{ {{range .Normalized.Outputs}} {{.Name}} {{bindtype .Type $structs}}; {{end}} })
 			if err != nil {

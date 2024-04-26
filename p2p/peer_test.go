@@ -241,7 +241,7 @@ func TestPeerDisconnectRace(t *testing.T) {
 		case <-disc:
 		case <-time.After(2 * time.Second):
 			// Peer.run should return quickly. If it doesn't the Peer
-			// goroutines are probably deadlocked. Call panic in order to
+			// goroutines are probably deadlocked. Call2 panic in order to
 			// show the stacks.
 			panic("Peer.run took to long to return.")
 		}

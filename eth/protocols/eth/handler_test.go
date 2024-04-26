@@ -68,9 +68,9 @@ func newTestBackend(blocks int) *testBackend {
 func newTestBackendWithGenerator(blocks int, shanghai bool, generator func(int, *core.BlockGen)) *testBackend {
 	var (
 		// Create a database pre-initialize with a genesis block
-		db                      = rawdb.NewMemoryDatabase()
-		config                  = params.TestChainConfig
-		engine consensus.Engine = ethash.NewFaker()
+		db                               = rawdb.NewMemoryDatabase()
+		config                           = params.TestChainConfig
+		engine consensus.ConsensusEngine = ethash.NewFaker()
 	)
 
 	if shanghai {

@@ -19,6 +19,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,13 +37,13 @@ import (
 //
 // StateProcessor implements Processor.
 type StateProcessor struct {
-	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical block chain
-	engine consensus.Engine    // Consensus engine used for block rewards
+	config *params.ChainConfig       // Chain configuration options
+	bc     *BlockChain               // Canonical block chain
+	engine consensus.ConsensusEngine // Consensus engine used for block rewards
 }
 
 // NewStateProcessor initialises a new StateProcessor.
-func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *StateProcessor {
+func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.ConsensusEngine) *StateProcessor {
 	return &StateProcessor{
 		config: config,
 		bc:     bc,
@@ -59,7 +60,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
-		receipts    types.Receipts
+		//receipts    types.Receipts
 		usedGas     = new(uint64)
 		header      = block.Header()
 		blockHash   = block.Hash()
@@ -79,8 +80,28 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
 	}
+	engine := p.engine
+	if cl, ok := engine.(*beacon.Beacon); ok {
+		engine = cl.InnerEngine()
+	}
+	pos, isPoS := engine.(consensus.PoS)
+
+	generalTxs := make([]*types.Transaction, 0)
+	systemTxs := make([]*types.Transaction, 0)
+	receipts := make([]*types.Receipt, 0)
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+		if isPoS {
+			isSystemTx, err := pos.IsSystemTransaction(tx, block.Header())
+			if err != nil {
+				return nil, nil, 0, err
+			}
+			if isSystemTx {
+				systemTxs = append(systemTxs, tx)
+				continue
+			}
+		}
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -91,6 +112,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		receipts = append(receipts, receipt)
+		generalTxs = append(generalTxs, tx)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 	// Fail if Shanghai not enabled and len(withdrawals) is non-zero.
@@ -99,7 +121,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		return nil, nil, 0, errors.New("withdrawals before shanghai")
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), withdrawals)
+	err := p.engine.Finalize(p.bc, header, statedb, &generalTxs, block.Uncles(), &receipts, &systemTxs, usedGas)
+	if err != nil {
+		return nil, nil, 0, err
+	}
 
 	return receipts, allLogs, *usedGas, nil
 }

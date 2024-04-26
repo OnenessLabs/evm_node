@@ -53,7 +53,7 @@ var (
 
 type testBackend struct {
 	chainConfig *params.ChainConfig
-	engine      consensus.Engine
+	engine      consensus.ConsensusEngine
 	chaindb     ethdb.Database
 	chain       *core.BlockChain
 
@@ -126,7 +126,7 @@ func (b *testBackend) ChainConfig() *params.ChainConfig {
 	return b.chainConfig
 }
 
-func (b *testBackend) Engine() consensus.Engine {
+func (b *testBackend) Engine() consensus.ConsensusEngine {
 	return b.engine
 }
 
@@ -600,7 +600,7 @@ func TestTracingWithOverrides(t *testing.T) {
 		expectErr   error
 		want        string
 	}{
-		// Call which can only succeed if state is state overridden
+		// Call2 which can only succeed if state is state overridden
 		{
 			blockNumber: rpc.LatestBlockNumber,
 			call: ethapi.TransactionArgs{

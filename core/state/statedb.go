@@ -1298,6 +1298,14 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 	return root, nil
 }
 
+// Prepare sets the current transaction hash and index which are
+// used when the EVM emits new state logs.
+func (s *StateDB) PrepareOasys(thash common.Hash, ti int) {
+	s.thash = thash
+	s.txIndex = ti
+	s.accessList = newAccessList()
+}
+
 // Prepare handles the preparatory steps for executing a state transition with.
 // This method must be invoked before state transition.
 //

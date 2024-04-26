@@ -93,7 +93,7 @@ func testHeaderVerificationForMerging(t *testing.T, isClique bool) {
 		gspec      *Genesis
 		preBlocks  []*types.Block
 		postBlocks []*types.Block
-		engine     consensus.Engine
+		engine     consensus.ConsensusEngine
 		merger     = consensus.NewMerger(rawdb.NewMemoryDatabase())
 	)
 	if isClique {

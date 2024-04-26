@@ -199,7 +199,7 @@ func (s *RPCService) Modules() map[string]string {
 
 // PeerInfo contains information about the remote end of the network connection.
 //
-// This is available within RPC method handlers through the context. Call
+// This is available within RPC method handlers through the context. Call2
 // PeerInfoFromContext to get information about the client connection related to
 // the current method call.
 type PeerInfo struct {

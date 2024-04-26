@@ -47,6 +47,9 @@ type ChainHeaderReader interface {
 
 	// GetTd retrieves the total difficulty from the database by hash and number.
 	GetTd(hash common.Hash, number uint64) *big.Int
+
+	// GetCanonicalHash returns the canonical hash for a given block number
+	GetCanonicalHash(number uint64) common.Hash
 }
 
 // ChainReader defines a small collection of methods needed to access the local
@@ -58,8 +61,8 @@ type ChainReader interface {
 	GetBlock(hash common.Hash, number uint64) *types.Block
 }
 
-// Engine is an algorithm agnostic consensus engine.
-type Engine interface {
+// ConsensusEngine is an algorithm agnostic consensus engine.
+type ConsensusEngine interface {
 	// Author retrieves the Ethereum address of the account that minted the given
 	// block, which may be different from the header's coinbase if a consensus
 	// engine is based on signatures.
@@ -83,21 +86,21 @@ type Engine interface {
 	// rules of a particular engine. The changes are executed inline.
 	Prepare(chain ChainHeaderReader, header *types.Header) error
 
-	// Finalize runs any post-transaction state modifications (e.g. block rewards
-	// or process withdrawals) but does not assemble the block.
+	// Finalize runs any post-transaction state modifications (e.g. block rewards)
+	// but does not assemble the block.
 	//
-	// Note: The state database might be updated to reflect any consensus rules
-	// that happen at finalization (e.g. block rewards).
-	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header, withdrawals []*types.Withdrawal)
+	// Note: The block header and state database might be updated to reflect any
+	// consensus rules that happen at finalization (e.g. block rewards).
+	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction,
+		uncles []*types.Header, receipts *[]*types.Receipt, systemTxs *[]*types.Transaction, usedGas *uint64) error
 
 	// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
-	// rewards or process withdrawals) and assembles the final block.
+	// rewards) and assembles the final block.
 	//
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
 	FinalizeAndAssemble(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header, receipts []*types.Receipt, withdrawals []*types.Withdrawal) (*types.Block, error)
+		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, []*types.Receipt, error)
 
 	// Seal generates a new sealing request for the given input block and pushes
 	// the result into the given channel.
@@ -122,8 +125,14 @@ type Engine interface {
 
 // PoW is a consensus engine based on proof-of-work.
 type PoW interface {
-	Engine
+	ConsensusEngine
 
 	// Hashrate returns the current mining hashrate of a PoW consensus engine.
 	Hashrate() float64
+}
+
+type PoS interface {
+	ConsensusEngine
+
+	IsSystemTransaction(tx *types.Transaction, header *types.Header) (bool, error)
 }

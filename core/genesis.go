@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/contracts/oasys"
 	"math/big"
 	"strings"
 
@@ -245,6 +246,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	}
 	// Just commit the new block if there is no stored genesis block.
 	stored := rawdb.ReadCanonicalHash(db, 0)
+	oasys.GenesisHash = stored
 	if (stored == common.Hash{}) {
 		if genesis == nil {
 			log.Info("Writing default main-net genesis block")
@@ -306,7 +308,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// chain config as that would be AllProtocolChanges (applying any new fork
 	// on top of an existing private network genesis block). In that case, only
 	// apply the overrides.
-	if genesis == nil && stored != params.MainnetGenesisHash {
+	if genesis == nil && stored != params.MainnetGenesisHash &&
+		stored != params.OasysMainnetGenesisHash && stored != params.OasysTestnetGenesisHash {
 		newcfg = storedcfg
 		applyOverrides(newcfg)
 	}
@@ -372,6 +375,10 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return params.SepoliaChainConfig
 	case ghash == params.GoerliGenesisHash:
 		return params.GoerliChainConfig
+	case ghash == params.OasysMainnetGenesisHash:
+		return params.OasysMainnetChainConfig
+	case ghash == params.OasysTestnetGenesisHash:
+		return params.OasysTestnetChainConfig
 	default:
 		return params.AllEthashProtocolChanges
 	}
@@ -458,6 +465,9 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	}
 	if config.Clique != nil && len(block.Extra()) < 32+crypto.SignatureLength {
 		return nil, errors.New("can't start clique chain without signers")
+	}
+	if config.Oasys != nil && len(block.Extra()) == 0 {
+		return nil, errors.New("can't start oasys chain without signers")
 	}
 	// All the checks has passed, flushAlloc the states derived from the genesis
 	// specification as well as the specification itself into the provided

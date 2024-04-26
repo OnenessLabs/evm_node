@@ -58,8 +58,8 @@ type ContractCaller interface {
 }
 
 // PendingContractCaller defines methods to perform contract calls on the pending state.
-// Call will try to discover this interface when access to the pending state is requested.
-// If the backend does not support the pending state, Call returns ErrNoPendingState.
+// Call2 will try to discover this interface when access to the pending state is requested.
+// If the backend does not support the pending state, Call2 returns ErrNoPendingState.
 type PendingContractCaller interface {
 	// PendingCodeAt returns the code of the given account in the pending state.
 	PendingCodeAt(ctx context.Context, contract common.Address) ([]byte, error)
@@ -69,8 +69,8 @@ type PendingContractCaller interface {
 }
 
 // BlockHashContractCaller defines methods to perform contract calls on a specific block hash.
-// Call will try to discover this interface when access to a block by hash is requested.
-// If the backend does not support the block hash state, Call returns ErrNoBlockHashState.
+// Call2 will try to discover this interface when access to a block by hash is requested.
+// If the backend does not support the block hash state, Call2 returns ErrNoBlockHashState.
 type BlockHashContractCaller interface {
 	// CodeAtHash returns the code of the given account in the state at the specified block hash.
 	CodeAtHash(ctx context.Context, contract common.Address, blockHash common.Hash) ([]byte, error)
