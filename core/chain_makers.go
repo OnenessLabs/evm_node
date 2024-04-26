@@ -312,6 +312,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	}
 	cm := newChainMaker(parent, config, engine)
 
+	blocks := make(types.Blocks, n)
+	chainReader := &fakeChainReader{config: config, engine: engine, blocks: blocks, first: parent}
+
 	genblock := func(i int, parent *types.Block, triedb *triedb.Database, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, cm: cm, parent: parent, statedb: statedb, engine: engine}
 		b.header = cm.makeHeader(parent, statedb, b.engine)
@@ -339,6 +342,12 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		}
 		if config.DAOForkSupport && config.DAOForkBlock != nil && config.DAOForkBlock.Cmp(b.header.Number) == 0 {
 			misc.ApplyDAOHardFork(statedb)
+		}
+		chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine)
+		if isChaosEngine {
+			if err := chaosEngine.PreHandle(chainReader, b.header, statedb); err != nil {
+				return nil, nil
+			}
 		}
 		// Execute any user modifications to the block
 		if gen != nil {
@@ -571,4 +580,89 @@ func (cm *chainMaker) GetBlock(hash common.Hash, number uint64) *types.Block {
 
 func (cm *chainMaker) GetTd(hash common.Hash, number uint64) *big.Int {
 	return nil // not supported
+}
+
+type fakeChainReader struct {
+	config *params.ChainConfig
+	engine consensus.Engine
+	first  *types.Block
+	blocks types.Blocks
+}
+
+// Config returns the chain configuration.
+func (cr *fakeChainReader) Config() *params.ChainConfig {
+	return cr.config
+}
+
+func (cr *fakeChainReader) Engine() consensus.Engine {
+	return cr.engine
+}
+
+func (cr *fakeChainReader) CurrentHeader() *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeaderByNumber(number uint64) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.NumberU64() == number {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeader(hash common.Hash, number uint64) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash && cr.first.NumberU64() == number {
+		return cr.first.Header()
+	}
+	return nil
+}
+
+func (cr *fakeChainReader) GetBlock(hash common.Hash, number uint64) *types.Block {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1]
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash && cr.first.NumberU64() == number {
+		return cr.first
+	}
+	return nil
+}
+
+// GetTd retrieves a block's total difficulty in the canonical chain from the
+// database by hash and number, caching it if found.
+func (cr *fakeChainReader) GetTd(hash common.Hash, number uint64) *big.Int {
+	//TODO Plausible
+	return big.NewInt(0)
 }

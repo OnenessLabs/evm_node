@@ -55,6 +55,7 @@ var (
 		LondonBlock:                   big.NewInt(12_965_000),
 		ArrowGlacierBlock:             big.NewInt(13_773_000),
 		GrayGlacierBlock:              big.NewInt(15_050_000),
+		GravitationBlock:              big.NewInt(829915),
 		TerminalTotalDifficulty:       MainnetTerminalTotalDifficulty, // 58_750_000_000_000_000_000_000
 		TerminalTotalDifficultyPassed: true,
 		ShanghaiTime:                  newUint64(1681338455),
@@ -345,6 +346,7 @@ type ChainConfig struct {
 	ArrowGlacierBlock   *big.Int `json:"arrowGlacierBlock,omitempty"`   // Eip-4345 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	GrayGlacierBlock    *big.Int `json:"grayGlacierBlock,omitempty"`    // Eip-5133 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	MergeNetsplitBlock  *big.Int `json:"mergeNetsplitBlock,omitempty"`  // Virtual fork after The Merge to use as a network splitter
+	GravitationBlock    *big.Int `json:"gravitationBlock,omitempty"`    //
 
 	// Fork scheduling was switched from blocks to timestamps here
 
@@ -365,6 +367,7 @@ type ChainConfig struct {
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
+	Chaos  *ChaosConfig  `json:"chaos,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -384,6 +387,25 @@ type CliqueConfig struct {
 // String implements the stringer interface, returning the consensus engine details.
 func (c *CliqueConfig) String() string {
 	return "clique"
+}
+
+// ChaosConfig is the consensus engine configs for proof-of-stake-authority based sealing.
+type ChaosConfig struct {
+	Period uint64 `json:"period"` // Number of seconds between blocks to enforce
+	Epoch  uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
+
+	// AttestationDelay is the delay number for a validator to provide an attestation.
+	// That is: only attest to a block which height is ≤ `currentHead - AttestationDelay`
+	AttestationDelay uint64 `json:"attestationDelay"`
+
+	Rule                  uint64         `json:"rule"`                  // Version of Chaos, which differ in behavious, 0 is the lastest default one
+	EnableDevVerification bool           `json:"enableDevVerification"` // Enable developer address verification
+	AdminDevnet           common.Address `json:"adminDevnet,omitempty"` // admin address in system contracts of GravitationHardFork for a private chain, ONLY used by develop or private chain.
+}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (c *ChaosConfig) String() string {
+	return "chaos"
 }
 
 // Description returns a human-readable description of ChainConfig.
@@ -412,6 +434,14 @@ func (c *ChainConfig) Description() string {
 			banner += "Consensus: Beacon (proof-of-stake), merging from Clique (proof-of-authority)\n"
 		} else {
 			banner += "Consensus: Beacon (proof-of-stake), merged from Clique (proof-of-authority)\n"
+		}
+	case c.Chaos != nil:
+		if c.TerminalTotalDifficulty == nil {
+			banner += "Consensus: Chaos (proof-of-authority)\n"
+		} else if !c.TerminalTotalDifficultyPassed {
+			banner += "Consensus: Beacon (proof-of-stake), merging from Chaos (proof-of-authority)\n"
+		} else {
+			banner += "Consensus: Beacon (proof-of-stake), merged from Chaos (proof-of-authority)\n"
 		}
 	default:
 		banner += "Consensus: unknown\n"
@@ -481,6 +511,11 @@ func (c *ChainConfig) Description() string {
 // IsHomestead returns whether num is either equal to the homestead block or greater.
 func (c *ChainConfig) IsHomestead(num *big.Int) bool {
 	return isBlockForked(c.HomesteadBlock, num)
+}
+
+// IsGravitation returns whether num is either equal to the Gravitation fork block or greater
+func (c *ChainConfig) IsGravitation(num *big.Int) bool {
+	return isForked(c.GravitationBlock, num)
 }
 
 // IsDAOFork returns whether num is either equal to the DAO fork block or greater.
@@ -930,4 +965,12 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, timestamp uint64) Rules 
 		IsPrague:         isMerge && c.IsPrague(num, timestamp),
 		IsVerkle:         isMerge && c.IsVerkle(num, timestamp),
 	}
+}
+
+// isForked returns whether a fork scheduled at block s is active at the given head block.
+func isForked(s, head *big.Int) bool {
+	if s == nil || head == nil {
+		return false
+	}
+	return s.Cmp(head) <= 0
 }

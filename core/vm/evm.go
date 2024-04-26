@@ -527,3 +527,10 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *
 
 // ChainConfig returns the environment's chain configuration
 func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
+
+type EvmAccessFilter interface {
+	// IsAddressDenied returns whether an address is denied.
+	IsAddressDenied(address common.Address, cType common.AddressCheckType) bool
+	// IsLogDenied returns whether a log (contract event) is denied.
+	IsLogDenied(log *types.Log) bool
+}
