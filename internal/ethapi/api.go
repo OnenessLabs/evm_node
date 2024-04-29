@@ -842,6 +842,47 @@ func (s *BlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Hash, fu
 	return nil, err
 }
 
+func (s *BlockChainAPI) GetDoubleSignPunishTransactionsByBlockNumber(ctx context.Context, number rpc.BlockNumber) ([]*RPCTransaction, error) {
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a ChaosEngine engine")
+	}
+
+	block, err := s.b.BlockByNumber(ctx, number)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getDoubleSignPunishTransactions(block, chaosEngine)
+}
+
+func (s *BlockChainAPI) GetDoubleSignPunishTransactionsByBlockHash(ctx context.Context, hash common.Hash) ([]*RPCTransaction, error) {
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a ChaosEngine engine")
+	}
+	block, err := s.b.BlockByHash(ctx, hash)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getDoubleSignPunishTransactions(block, chaosEngine)
+}
+
+func (s *BlockChainAPI) getDoubleSignPunishTransactions(block *types.Block, chaosEngine consensus.ChaosEngine) ([]*RPCTransaction, error) {
+	header := block.Header()
+	bhash := block.Hash()
+	bnumber := block.NumberU64()
+	txs := block.Transactions()
+	transactions := make([]*RPCTransaction, 0)
+	signer := types.MakeSigner(s.b.ChainConfig(), header.Number, block.Time())
+	for i, tx := range txs {
+		sender, _ := types.Sender(signer, tx)
+		if yes := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); yes {
+			transactions = append(transactions, newRPCTransaction(tx, bhash, bnumber, block.Time(), uint64(i), nil, s.b.ChainConfig()))
+		}
+	}
+	return transactions, nil
+}
+
 // GetUncleByBlockNumberAndIndex returns the uncle block for the given block hash and index.
 func (s *BlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
 	block, err := s.b.BlockByNumber(ctx, blockNr)

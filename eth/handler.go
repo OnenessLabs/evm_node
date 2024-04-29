@@ -41,7 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/triedb/pathdb"
+	"github.com/ethereum/go-ethereum/trie/pathdb"
 )
 
 const (
@@ -269,7 +269,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return h.chain.InsertChain(blocks)
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer)
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)

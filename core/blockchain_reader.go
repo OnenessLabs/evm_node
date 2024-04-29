@@ -30,7 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 // CurrentHeader retrieves the current head header of the canonical chain. The
@@ -444,4 +444,31 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 // block processing has started while false means it has stopped.
 func (bc *BlockChain) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscription {
 	return bc.scope.Track(bc.blockProcFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) SubscribeNewAttestationEvent(ch chan<- NewAttestationEvent) event.Subscription {
+	return bc.scope.Track(bc.newAttestationFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) SubscribeNewJustifiedOrFinalizedBlockEvent(ch chan<- NewJustifiedOrFinalizedBlockEvent) event.Subscription {
+	return bc.scope.Track(bc.newJustifiedOrFinalizedBlockFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
+	// Short circuit if the status's already in the cache, retrieve otherwise
+	if blob, ok := bc.BlockStatusCache.Get(number); ok {
+		data := blob.(*types.BlockStatus)
+		return data.Status, data.Hash
+	}
+	status, hash := rawdb.ReadBlockStatusByNum(bc.db, new(big.Int).SetUint64(number))
+	// Cache the found status for next time and return
+	// Only deterministic data is saved, and data tracking is required only at the beginning of startup
+	if status == types.BasFinalized {
+		bc.BlockStatusCache.Add(number, &types.BlockStatus{
+			BlockNumber: new(big.Int).SetUint64(number),
+			Hash:        hash,
+			Status:      status,
+		})
+	}
+	return status, hash
 }

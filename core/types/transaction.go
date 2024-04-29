@@ -41,6 +41,7 @@ var (
 	errInvalidYParity       = errors.New("'yParity' field must be 0 or 1")
 	errVYParityMismatch     = errors.New("'v' and 'yParity' fields do not match")
 	errVYParityMissing      = errors.New("missing 'yParity' or 'v' field in transaction")
+	ErrAddressDenied        = errors.New("address denied")
 )
 
 // Transaction types.

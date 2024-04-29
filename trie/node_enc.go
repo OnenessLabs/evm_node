@@ -20,7 +20,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-func nodeToBytes(n node) []byte {
+func nodeToBytes(n Node) []byte {
 	w := rlp.NewEncoderBuffer(nil)
 	n.encode(w)
 	result := w.ToBytes()

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
+	"github.com/holiman/uint256"
 	"io"
 	"math/big"
 	"math/rand"
@@ -747,21 +748,21 @@ func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consen
 // tryDistributeBlockFee distributes block fee to validators
 func (c *Chaos) tryDistributeBlockFee(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	fee := state.GetBalance(consensus.FeeRecoder)
-	if fee.Cmp(common.Big0) <= 0 {
+	if fee.Cmp(uint256.MustFromBig(common.Big0)) <= 0 {
 		return nil
 	}
 
 	// Miner will send tx to deposit block fees to contract, add to his balance first.
 	state.AddBalance(header.Coinbase, fee)
 	// reset fee
-	state.SetBalance(consensus.FeeRecoder, common.Big0)
+	state.SetBalance(consensus.FeeRecoder, uint256.MustFromBig(common.Big0))
 
 	return systemcontract.DistributeBlockFee(&systemcontract.CallContext{
 		Statedb:      state,
 		Header:       header,
 		ChainContext: newChainContext(chain, c),
 		ChainConfig:  c.chainConfig,
-	}, fee)
+	}, big.NewInt(int64(fee.Uint64())))
 }
 
 // tryLazyPunish punishes validators that didn't produce blocks

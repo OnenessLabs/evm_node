@@ -27,7 +27,7 @@ import (
 
 var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "[17]"}
 
-type node interface {
+type Node interface {
 	cache() (hashNode, bool)
 	encode(w rlp.EncoderBuffer)
 	fstring(string) string
@@ -35,12 +35,12 @@ type node interface {
 
 type (
 	fullNode struct {
-		Children [17]node // Actual trie node data to encode/decode (needs custom encoder)
+		Children [17]Node // Actual trie Node data to encode/decode (needs custom encoder)
 		flags    nodeFlag
 	}
 	shortNode struct {
 		Key   []byte
-		Val   node
+		Val   Node
 		flags nodeFlag
 	}
 	hashNode  []byte
@@ -51,7 +51,7 @@ type (
 // unset children need to serialize correctly.
 var nilValueNode = valueNode(nil)
 
-// EncodeRLP encodes a full node into the consensus RLP format.
+// EncodeRLP encodes a full Node into the consensus RLP format.
 func (n *fullNode) EncodeRLP(w io.Writer) error {
 	eb := rlp.NewEncoderBuffer(w)
 	n.encode(eb)
@@ -61,10 +61,10 @@ func (n *fullNode) EncodeRLP(w io.Writer) error {
 func (n *fullNode) copy() *fullNode   { copy := *n; return &copy }
 func (n *shortNode) copy() *shortNode { copy := *n; return &copy }
 
-// nodeFlag contains caching-related metadata about a node.
+// nodeFlag contains caching-related metadata about a Node.
 type nodeFlag struct {
-	hash  hashNode // cached hash of the node (may be nil)
-	dirty bool     // whether the node has changes that must be written to the database
+	hash  hashNode // cached hash of the Node (may be nil)
+	dirty bool     // whether the Node has changes that must be written to the database
 }
 
 func (n *fullNode) cache() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
@@ -112,38 +112,38 @@ func (n rawNode) EncodeRLP(w io.Writer) error {
 	return err
 }
 
-// mustDecodeNode is a wrapper of decodeNode and panic if any error is encountered.
-func mustDecodeNode(hash, buf []byte) node {
+// MustDecodeNode is a wrapper of decodeNode and panic if any error is encountered.
+func MustDecodeNode(hash, buf []byte) Node {
 	n, err := decodeNode(hash, buf)
 	if err != nil {
-		panic(fmt.Sprintf("node %x: %v", hash, err))
+		panic(fmt.Sprintf("Node %x: %v", hash, err))
 	}
 	return n
 }
 
 // mustDecodeNodeUnsafe is a wrapper of decodeNodeUnsafe and panic if any error is
 // encountered.
-func mustDecodeNodeUnsafe(hash, buf []byte) node {
+func mustDecodeNodeUnsafe(hash, buf []byte) Node {
 	n, err := decodeNodeUnsafe(hash, buf)
 	if err != nil {
-		panic(fmt.Sprintf("node %x: %v", hash, err))
+		panic(fmt.Sprintf("Node %x: %v", hash, err))
 	}
 	return n
 }
 
-// decodeNode parses the RLP encoding of a trie node. It will deep-copy the passed
+// decodeNode parses the RLP encoding of a trie Node. It will deep-copy the passed
 // byte slice for decoding, so it's safe to modify the byte slice afterwards. The-
 // decode performance of this function is not optimal, but it is suitable for most
 // scenarios with low performance requirements and hard to determine whether the
 // byte slice be modified or not.
-func decodeNode(hash, buf []byte) (node, error) {
+func decodeNode(hash, buf []byte) (Node, error) {
 	return decodeNodeUnsafe(hash, common.CopyBytes(buf))
 }
 
-// decodeNodeUnsafe parses the RLP encoding of a trie node. The passed byte slice
-// will be directly referenced by node without bytes deep copy, so the input MUST
+// decodeNodeUnsafe parses the RLP encoding of a trie Node. The passed byte slice
+// will be directly referenced by Node without bytes deep copy, so the input MUST
 // not be changed after.
-func decodeNodeUnsafe(hash, buf []byte) (node, error) {
+func decodeNodeUnsafe(hash, buf []byte) (Node, error) {
 	if len(buf) == 0 {
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -163,7 +163,7 @@ func decodeNodeUnsafe(hash, buf []byte) (node, error) {
 	}
 }
 
-func decodeShort(hash, elems []byte) (node, error) {
+func decodeShort(hash, elems []byte) (Node, error) {
 	kbuf, rest, err := rlp.SplitString(elems)
 	if err != nil {
 		return nil, err
@@ -171,10 +171,10 @@ func decodeShort(hash, elems []byte) (node, error) {
 	flag := nodeFlag{hash: hash}
 	key := compactToHex(kbuf)
 	if hasTerm(key) {
-		// value node
+		// value Node
 		val, _, err := rlp.SplitString(rest)
 		if err != nil {
-			return nil, fmt.Errorf("invalid value node: %v", err)
+			return nil, fmt.Errorf("invalid value Node: %v", err)
 		}
 		return &shortNode{key, valueNode(val), flag}, nil
 	}
@@ -206,23 +206,23 @@ func decodeFull(hash, elems []byte) (*fullNode, error) {
 
 const hashLen = len(common.Hash{})
 
-func decodeRef(buf []byte) (node, []byte, error) {
+func decodeRef(buf []byte) (Node, []byte, error) {
 	kind, val, rest, err := rlp.Split(buf)
 	if err != nil {
 		return nil, buf, err
 	}
 	switch {
 	case kind == rlp.List:
-		// 'embedded' node reference. The encoding must be smaller
+		// 'embedded' Node reference. The encoding must be smaller
 		// than a hash in order to be valid.
 		if size := len(buf) - len(rest); size > hashLen {
-			err := fmt.Errorf("oversized embedded node (size is %d bytes, want size < %d)", size, hashLen)
+			err := fmt.Errorf("oversized embedded Node (size is %d bytes, want size < %d)", size, hashLen)
 			return nil, buf, err
 		}
 		n, err := decodeNode(nil, buf)
 		return n, rest, err
 	case kind == rlp.String && len(val) == 0:
-		// empty node
+		// empty Node
 		return nil, rest, nil
 	case kind == rlp.String && len(val) == 32:
 		return hashNode(val), rest, nil
@@ -232,7 +232,7 @@ func decodeRef(buf []byte) (node, []byte, error) {
 }
 
 // wraps a decoding error with information about the path to the
-// invalid child node (for debugging encoding issues).
+// invalid child Node (for debugging encoding issues).
 type decodeError struct {
 	what  error
 	stack []string

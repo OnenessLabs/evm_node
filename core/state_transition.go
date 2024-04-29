@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus"
 	"math"
 	"math/big"
 
@@ -456,7 +457,11 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	} else {
 		fee := new(uint256.Int).SetUint64(st.gasUsed())
 		fee.Mul(fee, effectiveTipU256)
-		st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		if st.evm.ChainConfig().Chaos != nil {
+			st.state.AddBalance(consensus.FeeRecoder, fee)
+		} else {
+			st.state.AddBalance(st.evm.Context.Coinbase, fee)
+		}
 	}
 
 	return &ExecutionResult{

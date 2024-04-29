@@ -335,7 +335,7 @@ func (c *Chaos) IsDoubleSignPunished(chain consensus.ChainHeaderReader, header *
 func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, p *types.ViolateCasperFFGPunish, totalTxIndex int, txHash, bHash common.Hash) (*types.Receipt, error) {
 	var receipt *types.Receipt
 
-	state.Prepare(txHash, totalTxIndex)
+	state.PrepareChaos(txHash, totalTxIndex)
 	topics := []common.Hash{
 		executedDoubleSignPunishEventSig,
 		p.Plaintiff.Hash(),
@@ -366,7 +366,7 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 	receipt = types.NewReceipt([]byte{}, err != nil, header.GasUsed)
 	log.Info("executeDoubleSignPunishMsg", "Plaintiff", p.Plaintiff, "Defendant", p.Defendant, "pushHash", p.Hash().String(), "success", true)
 
-	receipt.Logs = state.GetLogs(txHash, bHash)
+	receipt.Logs = state.GetLogs(txHash, header.Number.Uint64(), bHash)
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 
 	receipt.TxHash = txHash

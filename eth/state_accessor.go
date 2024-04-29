@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/triedb"
 )
 
 // noopReleaser is returned in case there is no operation expected
@@ -230,25 +229,54 @@ func (eth *Ethereum) stateAtTransaction(ctx context.Context, block *types.Block,
 	// Lookup the statedb of parent block from the live database,
 	// otherwise regenerate it on the flight.
 	statedb, release, err := eth.stateAtBlock(ctx, parent, reexec, nil, true, false)
+	if err == nil && eth.isChaosEngine {
+		err = eth.chaosEngine.PreHandle(eth.blockchain, block.Header(), statedb)
+	}
 	if err != nil {
 		return nil, vm.BlockContext{}, nil, nil, err
 	}
+
 	if txIndex == 0 && len(block.Transactions()) == 0 {
 		return nil, vm.BlockContext{}, statedb, release, nil
 	}
 	// Recompute transactions up to the target index.
 	signer := types.MakeSigner(eth.blockchain.Config(), block.Number(), block.Time())
+
+	header := block.Header()
+	var accessFilter vm.EvmAccessFilter
+	if eth.isChaosEngine {
+		accessFilter = eth.chaosEngine.CreateEvmAccessFilter(header, statedb)
+	}
+
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
+		context.AccessFilter = accessFilter
 		if idx == txIndex {
 			return msg, context, statedb, release, nil
 		}
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{})
 		statedb.SetTxContext(tx.Hash(), idx)
+		if eth.isChaosEngine {
+			sender, _ := types.Sender(signer, tx)
+			if ok := eth.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); ok {
+				if _, _, err := eth.chaosEngine.ApplyDoubleSignPunishTx(vmenv, sender, tx); err != nil {
+					return nil, vm.BlockContext{}, nil, release, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
+				}
+				continue
+			}
+			if ok := eth.chaosEngine.IsSysTransaction(sender, tx, header); ok {
+				context.AccessFilter = nil
+				if _, _, err := eth.chaosEngine.ApplyProposalTx(vmenv, statedb, idx, sender, tx); err != nil {
+					return nil, vm.BlockContext{}, nil, release, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
+				}
+				continue
+			}
+		}
+
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 		}

@@ -21,8 +21,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/trie/database"
 	"github.com/ethereum/go-ethereum/trie/trienode"
-	"github.com/ethereum/go-ethereum/triedb/database"
 )
 
 // testReader implements database.Reader interface, providing function to
@@ -33,10 +33,10 @@ type testReader struct {
 	nodes  []*trienode.MergedNodeSet // sorted from new to old
 }
 
-// Node implements database.Reader interface, retrieving trie node with
+// Node implements database.Reader interface, retrieving trie Node with
 // all available cached layers.
 func (r *testReader) Node(owner common.Hash, path []byte, hash common.Hash) ([]byte, error) {
-	// Check the node presence with the cached layer, from latest to oldest.
+	// Check the Node presence with the cached layer, from latest to oldest.
 	for _, nodes := range r.nodes {
 		if _, ok := nodes.Sets[owner]; !ok {
 			continue
@@ -50,7 +50,7 @@ func (r *testReader) Node(owner common.Hash, path []byte, hash common.Hash) ([]b
 		}
 		return n.Blob, nil
 	}
-	// Check the node presence in database.
+	// Check the Node presence in database.
 	return rawdb.ReadTrieNode(r.db, owner, path, hash, r.scheme), nil
 }
 

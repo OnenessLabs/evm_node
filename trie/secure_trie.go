@@ -20,8 +20,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/database"
 	"github.com/ethereum/go-ethereum/trie/trienode"
-	"github.com/ethereum/go-ethereum/triedb/database"
 )
 
 // SecureTrie is the old name of StateTrie.
@@ -57,11 +58,11 @@ type StateTrie struct {
 	secKeyCacheOwner *StateTrie // Pointer to self, replace the key cache on mismatch
 }
 
-// NewStateTrie creates a trie with an existing root node from a backing database.
+// NewStateTrie creates a trie with an existing root Node from a backing database.
 //
 // If root is the zero hash or the sha3 hash of an empty string, the
 // trie is initially empty. Otherwise, New will panic if db is nil
-// and returns MissingNodeError if the root node cannot be found.
+// and returns MissingNodeError if the root Node cannot be found.
 func NewStateTrie(id *ID, db database.Database) (*StateTrie, error) {
 	if db == nil {
 		panic("trie.NewStateTrie called without a database")
@@ -71,6 +72,20 @@ func NewStateTrie(id *ID, db database.Database) (*StateTrie, error) {
 		return nil, err
 	}
 	return &StateTrie{trie: *trie, db: db}, nil
+}
+
+// NewSecureWithCache creates a trie with an existing root Node from a backing database
+// with dirty trie Node hash cache
+func NewSecureWithCache(root common.Hash, db *triedb.Database, dirtyTrieNodes *triedb.HashCache) (*SecureTrie, error) {
+	if db == nil {
+		panic("trie.NewSecure called without a database")
+	}
+	trie, err := NewWithCache(root, db, dirtyTrieNodes)
+	if err != nil {
+		return nil, err
+	}
+	return &SecureTrie{trie: *trie}, nil
+
 }
 
 // MustGet returns the value for key stored in the trie.
@@ -85,7 +100,7 @@ func (t *StateTrie) MustGet(key []byte) []byte {
 // GetStorage attempts to retrieve a storage slot with provided account address
 // and slot key. The value bytes must not be modified by the caller.
 // If the specified storage slot is not in the trie, nil will be returned.
-// If a trie node is not found in the database, a MissingNodeError is returned.
+// If a trie Node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
 	enc, err := t.trie.Get(t.hashKey(key))
 	if err != nil || len(enc) == 0 {
@@ -97,7 +112,7 @@ func (t *StateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
 
 // GetAccount attempts to retrieve an account with provided account address.
 // If the specified account is not in the trie, nil will be returned.
-// If a trie node is not found in the database, a MissingNodeError is returned.
+// If a trie Node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) GetAccount(address common.Address) (*types.StateAccount, error) {
 	res, err := t.trie.Get(t.hashKey(address.Bytes()))
 	if res == nil || err != nil {
@@ -121,10 +136,10 @@ func (t *StateTrie) GetAccountByHash(addrHash common.Hash) (*types.StateAccount,
 	return ret, err
 }
 
-// GetNode attempts to retrieve a trie node by compact-encoded path. It is not
+// GetNode attempts to retrieve a trie Node by compact-encoded path. It is not
 // possible to use keybyte-encoding as the path might contain odd nibbles.
-// If the specified trie node is not in the trie, nil will be returned.
-// If a trie node is not found in the database, a MissingNodeError is returned.
+// If the specified trie Node is not in the trie, nil will be returned.
+// If a trie Node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) GetNode(path []byte) ([]byte, int, error) {
 	return t.trie.GetNode(path)
 }
@@ -151,7 +166,7 @@ func (t *StateTrie) MustUpdate(key, value []byte) {
 // The value bytes must not be modified by the caller while they are
 // stored in the trie.
 //
-// If a node is not found in the database, a MissingNodeError is returned.
+// If a Node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) UpdateStorage(_ common.Address, key, value []byte) error {
 	hk := t.hashKey(key)
 	v, _ := rlp.EncodeToBytes(value)
@@ -190,8 +205,8 @@ func (t *StateTrie) MustDelete(key []byte) {
 }
 
 // DeleteStorage removes any existing storage slot from the trie.
-// If the specified trie node is not in the trie, nothing will be changed.
-// If a node is not found in the database, a MissingNodeError is returned.
+// If the specified trie Node is not in the trie, nothing will be changed.
+// If a Node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) DeleteStorage(_ common.Address, key []byte) error {
 	hk := t.hashKey(key)
 	delete(t.getSecKeyCache(), string(hk))
@@ -215,7 +230,7 @@ func (t *StateTrie) GetKey(shaKey []byte) []byte {
 }
 
 // Commit collects all dirty nodes in the trie and replaces them with the
-// corresponding node hash. All collected nodes (including dirty leaves if
+// corresponding Node hash. All collected nodes (including dirty leaves if
 // collectLeaf is true) will be encapsulated into a nodeset for return.
 // The returned nodeset can be nil if the trie is clean (nothing to commit).
 // All cached preimages will be also flushed if preimages recording is enabled.

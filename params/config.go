@@ -17,7 +17,9 @@
 package params
 
 import (
+	"encoding/binary"
 	"fmt"
+	"golang.org/x/crypto/sha3"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -31,6 +33,62 @@ var (
 	SepoliaGenesisHash = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
 	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
 )
+
+// TrustedCheckpoints associates each known checkpoint with the genesis hash of
+// the chain it belongs to.
+var TrustedCheckpoints = map[common.Hash]*TrustedCheckpoint{}
+
+// CheckpointOracles associates each known checkpoint oracles with the genesis hash of
+// the chain it belongs to.
+var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{}
+
+// TrustedCheckpoint represents a set of post-processed trie roots (CHT and
+// BloomTrie) associated with the appropriate section index and head hash. It is
+// used to start light syncing from this checkpoint and avoid downloading the
+// entire header chain while still being able to securely access old headers/logs.
+type TrustedCheckpoint struct {
+	SectionIndex uint64      `json:"sectionIndex"`
+	SectionHead  common.Hash `json:"sectionHead"`
+	CHTRoot      common.Hash `json:"chtRoot"`
+	BloomRoot    common.Hash `json:"bloomRoot"`
+}
+
+// HashEqual returns an indicator comparing the itself hash with given one.
+func (c *TrustedCheckpoint) HashEqual(hash common.Hash) bool {
+	if c.Empty() {
+		return hash == common.Hash{}
+	}
+	return c.Hash() == hash
+}
+
+// Hash returns the hash of checkpoint's four key fields(index, sectionHead, chtRoot and bloomTrieRoot).
+func (c *TrustedCheckpoint) Hash() common.Hash {
+	var sectionIndex [8]byte
+	binary.BigEndian.PutUint64(sectionIndex[:], c.SectionIndex)
+
+	w := sha3.NewLegacyKeccak256()
+	w.Write(sectionIndex[:])
+	w.Write(c.SectionHead[:])
+	w.Write(c.CHTRoot[:])
+	w.Write(c.BloomRoot[:])
+
+	var h common.Hash
+	w.Sum(h[:0])
+	return h
+}
+
+// Empty returns an indicator whether the checkpoint is regarded as empty.
+func (c *TrustedCheckpoint) Empty() bool {
+	return c.SectionHead == (common.Hash{}) || c.CHTRoot == (common.Hash{}) || c.BloomRoot == (common.Hash{})
+}
+
+// CheckpointOracleConfig represents a set of checkpoint contract(which acts as an oracle)
+// config which used for light client checkpoint syncing.
+type CheckpointOracleConfig struct {
+	Address   common.Address   `json:"address"`
+	Signers   []common.Address `json:"signers"`
+	Threshold uint64           `json:"threshold"`
+}
 
 func newUint64(val uint64) *uint64 { return &val }
 
@@ -56,11 +114,18 @@ var (
 		ArrowGlacierBlock:             big.NewInt(13_773_000),
 		GrayGlacierBlock:              big.NewInt(15_050_000),
 		GravitationBlock:              big.NewInt(829915),
+		HeliocentrismBlock:            big.NewInt(0),
 		TerminalTotalDifficulty:       MainnetTerminalTotalDifficulty, // 58_750_000_000_000_000_000_000
 		TerminalTotalDifficultyPassed: true,
 		ShanghaiTime:                  newUint64(1681338455),
 		CancunTime:                    newUint64(1710338135),
 		Ethash:                        new(EthashConfig),
+		Chaos: &ChaosConfig{
+			Period:                3,
+			Epoch:                 200,
+			AttestationDelay:      2,
+			EnableDevVerification: true,
+		},
 	}
 	// HoleskyChainConfig contains the chain parameters to run a node on the Holesky test network.
 	HoleskyChainConfig = &ChainConfig{
@@ -246,6 +311,13 @@ var (
 		TerminalTotalDifficultyPassed: false,
 		Ethash:                        new(EthashConfig),
 		Clique:                        nil,
+		Chaos: &ChaosConfig{
+			Period:                3,
+			Epoch:                 200,
+			AttestationDelay:      2,
+			Rule:                  1,
+			EnableDevVerification: true,
+		},
 	}
 
 	// MergedTestChainConfig contains every protocol change (EIPs) introduced
@@ -307,6 +379,58 @@ var (
 		Ethash:                        new(EthashConfig),
 		Clique:                        nil,
 	}
+
+	// TestnetChainConfig contains the chain parameters to run a node on the YOLOv1 test network.
+	TestnetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(1819),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    nil,
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		HeliocentrismBlock:  big.NewInt(1404110),
+		GravitationBlock:    big.NewInt(1404110),
+		Chaos: &ChaosConfig{
+			Period:                3,
+			Epoch:                 200,
+			AttestationDelay:      2,
+			Rule:                  1,
+			EnableDevVerification: true,
+		},
+	}
+
+	AllChaosProtocolChanges = &ChainConfig{
+		ChainID:                 big.NewInt(1337),
+		HomesteadBlock:          big.NewInt(0),
+		DAOForkBlock:            nil,
+		DAOForkSupport:          false,
+		EIP150Block:             big.NewInt(0),
+		EIP155Block:             big.NewInt(0),
+		EIP158Block:             big.NewInt(0),
+		ByzantiumBlock:          big.NewInt(0),
+		ConstantinopleBlock:     big.NewInt(0),
+		PetersburgBlock:         big.NewInt(0),
+		IstanbulBlock:           big.NewInt(0),
+		MuirGlacierBlock:        big.NewInt(0),
+		BerlinBlock:             big.NewInt(0),
+		LondonBlock:             big.NewInt(0),
+		ArrowGlacierBlock:       nil,
+		HeliocentrismBlock:      big.NewInt(0),
+		GravitationBlock:        big.NewInt(0),
+		TerminalTotalDifficulty: nil,
+		Ethash:                  nil,
+		Clique:                  nil,
+		Chaos:                   &ChaosConfig{Period: 0, Epoch: 30000, AttestationDelay: 2},
+	}
+
 	TestRules = TestChainConfig.Rules(new(big.Int), false, 0)
 )
 
@@ -347,6 +471,7 @@ type ChainConfig struct {
 	GrayGlacierBlock    *big.Int `json:"grayGlacierBlock,omitempty"`    // Eip-5133 (bomb delay) switch block (nil = no fork, 0 = already activated)
 	MergeNetsplitBlock  *big.Int `json:"mergeNetsplitBlock,omitempty"`  // Virtual fork after The Merge to use as a network splitter
 	GravitationBlock    *big.Int `json:"gravitationBlock,omitempty"`    //
+	HeliocentrismBlock  *big.Int `json:"heliocentrismBlock,omitempty"`  //
 
 	// Fork scheduling was switched from blocks to timestamps here
 
@@ -516,6 +641,14 @@ func (c *ChainConfig) IsHomestead(num *big.Int) bool {
 // IsGravitation returns whether num is either equal to the Gravitation fork block or greater
 func (c *ChainConfig) IsGravitation(num *big.Int) bool {
 	return isForked(c.GravitationBlock, num)
+}
+
+var (
+	ContinousInturn = uint64(4)
+)
+
+func (c *ChainConfig) ChaosContinuousInturn(blockNumber *big.Int) uint64 {
+	return ContinousInturn
 }
 
 // IsDAOFork returns whether num is either equal to the DAO fork block or greater.
@@ -973,4 +1106,13 @@ func isForked(s, head *big.Int) bool {
 		return false
 	}
 	return s.Cmp(head) <= 0
+}
+
+// IsChaosCompatible checks whether consensus config of Chaos is compatible
+func (c *ChainConfig) IsChaosCompatible(newcfg *ChainConfig) bool {
+	if c.Chaos != nil && newcfg.Chaos != nil {
+		return c.Chaos.Period == newcfg.Chaos.Period && c.Chaos.Epoch == newcfg.Chaos.Epoch &&
+			c.Chaos.AttestationDelay == newcfg.Chaos.AttestationDelay
+	}
+	return c.Chaos == nil && newcfg.Chaos == nil
 }

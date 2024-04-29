@@ -19,6 +19,7 @@ package ethconfig
 
 import (
 	"errors"
+	"github.com/ethereum/go-ethereum/consensus/chaos"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -169,6 +170,10 @@ func CreateConsensusEngine(config *params.ChainConfig, db ethdb.Database) (conse
 	if config.Clique != nil {
 		return beacon.New(clique.New(config.Clique, db)), nil
 	}
+	if config.Chaos != nil {
+		return chaos.New(config, db), nil
+	}
+
 	// If defaulting to proof-of-work, enforce an already merged network since
 	// we cannot run PoW algorithms anymore, so we cannot even follow a chain
 	// not coordinated by a beacon node.

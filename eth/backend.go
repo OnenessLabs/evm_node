@@ -20,6 +20,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/chaos"
 	"math/big"
 	"runtime"
 	"sync"
@@ -82,6 +83,9 @@ type Ethereum struct {
 	eventMux       *event.TypeMux
 	engine         consensus.Engine
 	accountManager *accounts.Manager
+
+	isChaosEngine bool
+	chaosEngine   consensus.ChaosEngine
 
 	bloomRequests     chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
 	bloomIndexer      *core.ChainIndexer             // Bloom indexer operating during block imports
@@ -172,6 +176,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
 	}
+	eth.chaosEngine, eth.isChaosEngine = eth.engine.(consensus.ChaosEngine)
+
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
 	if bcVersion != nil {
@@ -233,6 +239,27 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// do some extra work if consensus engine is chaos.
+	if chaosEngine, ok := eth.engine.(*chaos.Chaos); ok {
+		// set chain & state fn
+		chaosEngine.SetChain(eth.blockchain)
+		chaosEngine.SetStateFn(eth.blockchain.StateAt)
+
+		// set consensus-related transaction validator
+		eth.txPool.InitTxFilter(chaosEngine)
+
+		// Init RewardsUpdatePeroid
+		currState, err := eth.blockchain.State()
+		if err != nil {
+			return nil, err
+		}
+		if err = chaosEngine.InitRewardsUpdatePeroid(eth.blockchain, currState); err != nil {
+			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
+			return nil, err
+		}
+	}
+
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
 	if eth.handler, err = newHandler(&handlerConfig{
@@ -402,6 +429,9 @@ func (s *Ethereum) shouldPreserve(header *types.Header) bool {
 	if _, ok := s.engine.(*clique.Clique); ok {
 		return false
 	}
+	if _, ok := s.engine.(*chaos.Chaos); ok {
+		return false
+	}
 	return s.isLocalBlock(header)
 }
 
@@ -448,6 +478,15 @@ func (s *Ethereum) StartMining() error {
 			}
 			cli.Authorize(eb, wallet.SignData)
 		}
+
+		if chaos, ok := s.engine.(*chaos.Chaos); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
+		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		s.handler.enableSyncedFeatures()
@@ -469,6 +508,26 @@ func (s *Ethereum) StopMining() {
 	}
 	// Stop the block creating itself
 	s.miner.Stop()
+}
+
+func (s *Ethereum) StartAttestation() {
+	if s.IsMining() {
+		if c, ok := s.engine.(*chaos.Chaos); ok {
+			if c.AttestationStatus() == types.AttestationStop {
+				c.StartAttestation()
+			}
+		}
+	}
+}
+
+func (s *Ethereum) StopAttestation() {
+	if s.IsMining() {
+		if c, ok := s.engine.(*chaos.Chaos); ok {
+			if c.AttestationStatus() == types.AttestationStart {
+				c.StopAttestation()
+			}
+		}
+	}
 }
 
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }

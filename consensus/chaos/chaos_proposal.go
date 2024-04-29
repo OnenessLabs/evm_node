@@ -182,7 +182,7 @@ func (c *Chaos) replayProposal(chain consensus.ChainHeaderReader, header *types.
 func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, prop *systemcontract.Proposal, totalTxIndex int, txHash, bHash common.Hash) *types.Receipt {
 	var receipt *types.Receipt
 	action := prop.Action.Uint64()
-	state.Prepare(txHash, totalTxIndex)
+	state.PrepareChaos(txHash, totalTxIndex)
 	// emit an event defined as follows:
 	// event ProposalExecuted(address indexed _from, address indexed _to, uint256 indexed _value, uint256 _id, uint256 _action, bytes _data)
 	// event signature:  crypto.Keccak256([]byte("ProposalExecuted(address,address,uint256,uint256,uint256,bytes)"))
@@ -224,7 +224,7 @@ func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *ty
 		log.Warn("executeProposalMsg failed, unsupported action", "action", action, "id", prop.Id.String(), "from", prop.From, "to", prop.To, "value", prop.Value.String(), "data", hexutil.Encode(prop.Data), "txHash", txHash.String())
 	}
 
-	receipt.Logs = state.GetLogs(txHash, bHash)
+	receipt.Logs = state.GetLogs(txHash, header.Number.Uint64(), bHash)
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	receipt.TxHash = txHash
 	receipt.BlockHash = bHash
@@ -282,7 +282,7 @@ func (c *Chaos) ApplyProposalTx(evm *vm.EVM, state *state.StateDB, txIndex int, 
 	case 0:
 		// evm action.
 		// actually run the governance message
-		state.Prepare(tx.Hash(), txIndex)
+		state.PrepareChaos(tx.Hash(), txIndex)
 		evm.TxContext = vm.TxContext{
 			Origin:   prop.From,
 			GasPrice: common.Big0,

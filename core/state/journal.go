@@ -149,6 +149,12 @@ type (
 		account       *common.Address
 		key, prevalue common.Hash
 	}
+
+	eraseChange struct {
+		account            *common.Address
+		prevcode, prevhash []byte
+		prevroot           common.Hash
+	}
 )
 
 func (ch createObjectChange) revert(s *StateDB) {
@@ -297,4 +303,13 @@ func (ch accessListAddSlotChange) revert(s *StateDB) {
 
 func (ch accessListAddSlotChange) dirtied() *common.Address {
 	return nil
+}
+
+func (ch eraseChange) revert(s *StateDB) {
+	obj := s.getStateObject(*ch.account)
+	obj.revertErase(common.BytesToHash(ch.prevhash), ch.prevcode, ch.prevroot)
+}
+
+func (ch eraseChange) dirtied() *common.Address {
+	return ch.account
 }

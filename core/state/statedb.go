@@ -19,7 +19,9 @@ package state
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,10 +38,17 @@ import (
 	"github.com/holiman/uint256"
 )
 
+var emptyCodeHash = crypto.Keccak256(nil)
+
 const (
 	// storageDeleteLimit denotes the highest permissible memory allocation
 	// employed for contract storage deletion.
 	storageDeleteLimit = 512 * 1024 * 1024
+)
+
+var (
+	// emptyRoot is the known root hash of an empty trie.
+	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 )
 
 type revision struct {
@@ -77,12 +86,18 @@ type StateDB struct {
 	accountsOrigin map[common.Address][]byte                 // The original value of mutated accounts in 'slim RLP' encoding
 	storagesOrigin map[common.Address]map[common.Hash][]byte // The original value of mutated slots in prefix-zero trimmed rlp format
 
+	dirtyTrieNodes *triedb.HashCache // use to cache <hash, trieNode> inside a block
+
 	// This map holds 'live' objects, which will get modified while processing
 	// a state transition.
 	stateObjects         map[common.Address]*stateObject
 	stateObjectsPending  map[common.Address]struct{}            // State objects finalized but not yet written to the trie
 	stateObjectsDirty    map[common.Address]struct{}            // State objects modified in the current execution
 	stateObjectsDestruct map[common.Address]*types.StateAccount // State objects destructed in the block along with its previous value
+
+	snapDestructs map[common.Hash]struct{}
+	snapAccounts  map[common.Hash][]byte
+	snapStorage   map[common.Hash]map[common.Hash][]byte
 
 	// DB error.
 	// State objects are used by the consensus core and VM which are
@@ -142,15 +157,18 @@ type StateDB struct {
 
 // New creates a new state from a given trie.
 func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) {
-	tr, err := db.OpenTrie(root)
+	dirtyHashCache := triedb.NewHashCache()
+	tr, err := db.OpenTrieWithCache(root, dirtyHashCache)
 	if err != nil {
 		return nil, err
 	}
+
 	sdb := &StateDB{
 		db:                   db,
 		trie:                 tr,
 		originalRoot:         root,
 		snaps:                snaps,
+		dirtyTrieNodes:       dirtyHashCache,
 		accounts:             make(map[common.Hash][]byte),
 		storages:             make(map[common.Hash]map[common.Hash][]byte),
 		accountsOrigin:       make(map[common.Address][]byte),
@@ -233,6 +251,20 @@ func (s *StateDB) Logs() []*types.Log {
 		logs = append(logs, lgs...)
 	}
 	return logs
+}
+
+// Erase sets the code/storage-root to empty for the given account.
+// This's a governance action.
+//
+// The account is still available, and with it's balance unchanged.
+func (s *StateDB) Erase(addr common.Address) bool {
+	stateObject := s.getStateObject(addr)
+	if stateObject == nil {
+		return false
+	}
+	stateObject.erase()
+
+	return true
 }
 
 // AddPreimage records a SHA3 preimage seen by the VM.
@@ -1388,6 +1420,35 @@ func (s *StateDB) convertAccountSet(set map[common.Address]*types.StateAccount) 
 	return ret
 }
 
+// PrepareAccessList handles the preparatory steps for executing a state transition with
+// regards to both EIP-2929 and EIP-2930:
+//
+// - Add sender to access list (2929)
+// - Add destination to access list (2929)
+// - Add precompiles to access list (2929)
+// - Add the contents of the optional tx access list (2930)
+//
+// This method should only be called if Berlin/2929+2930 is applicable at the current number.
+func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
+	// Clear out any leftover from previous executions
+	s.accessList = newAccessList()
+
+	s.AddAddressToAccessList(sender)
+	if dst != nil {
+		s.AddAddressToAccessList(*dst)
+		// If it's a create-tx, the destination will be added inside evm.create
+	}
+	for _, addr := range precompiles {
+		s.AddAddressToAccessList(addr)
+	}
+	for _, el := range list {
+		s.AddAddressToAccessList(el.Address)
+		for _, key := range el.StorageKeys {
+			s.AddSlotToAccessList(el.Address, key)
+		}
+	}
+}
+
 // copySet returns a deep-copied set.
 func copySet[k comparable](set map[k][]byte) map[k][]byte {
 	copied := make(map[k][]byte, len(set))
@@ -1407,4 +1468,116 @@ func copy2DSet[k comparable](set map[k]map[common.Hash][]byte) map[k]map[common.
 		}
 	}
 	return copied
+}
+
+// Prepare sets the current transaction hash and index which are
+// used when the EVM emits new state logs.
+func (s *StateDB) PrepareChaos(thash common.Hash, ti int) {
+	s.thash = thash
+	s.txIndex = ti
+}
+
+func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.Hash)) error {
+	if s.dbErr != nil {
+		return fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
+	}
+	// Finalize any pending changes and merge everything into the tries
+	root := s.IntermediateRoot(deleteEmptyObjects)
+
+	// If snapshotting is enabled, update the snapshot tree with this new version
+	if s.snap != nil {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		defer wg.Wait()
+		go func() {
+			defer wg.Done()
+			var start time.Time
+			if metrics.EnabledExpensive {
+				start = time.Now()
+			}
+			// Only update if there's a state transition (skip empty Clique blocks)
+			if parent := s.snap.Root(); parent != root {
+				if err := s.snaps.Update(root, parent, s.snapDestructs, s.snapAccounts, s.snapStorage); err != nil {
+					log.Warn("Failed to update snapshot tree", "from", parent, "to", root, "err", err)
+				}
+				// Keep 128 diff layers in the memory, persistent layer is 129th.
+				// - head layer is paired with HEAD state
+				// - head-1 layer is paired with HEAD-1 state
+				// - head-127 layer(bottom-most diff layer) is paired with HEAD-127 state
+				if err := s.snaps.Cap(root, 128); err != nil {
+					log.Warn("Failed to cap snapshot tree", "root", root, "layers", 128, "err", err)
+				}
+			}
+			s.snap, s.snapDestructs, s.snapAccounts, s.snapStorage = nil, nil, nil, nil
+			if metrics.EnabledExpensive {
+				s.SnapshotCommits += time.Since(start)
+			}
+		}()
+	}
+
+	// Write any contract code associated with the state object
+	codeWriter := s.db.TrieDB().DiskDB().NewBatch()
+	for addr := range s.stateObjectsDirty {
+		if obj := s.stateObjects[addr]; !obj.deleted {
+			// Write any contract code associated with the state object
+			if obj.code != nil && obj.dirtyCode {
+				rawdb.WriteCode(codeWriter, common.BytesToHash(obj.CodeHash()), obj.code)
+				obj.dirtyCode = false
+			}
+			// Write any storage changes in the state object to its storage trie
+		}
+	}
+	if codeWriter.ValueSize() > 0 {
+		if err := codeWriter.Write(); err != nil {
+			log.Crit("Failed to commit dirty codes", "error", err)
+		}
+	}
+
+	s.db.TrieDB().WaitAndPrepareNextCommit(s.dirtyTrieNodes)
+	go func(s *StateDB) {
+		defer s.db.TrieDB().DoneAsyncCommit()
+		// Commit objects to the trie, measuring the elapsed time
+		var storageCommitted int
+		for addr := range s.stateObjectsDirty {
+			if obj := s.stateObjects[addr]; !obj.deleted {
+
+				// Write any storage changes in the state object to its storage trie
+				committed, err := obj.CommitTrie(s.db)
+				if err != nil {
+					log.Crit("Aync commit storage trie error", "addr", addr, "err", err)
+					return
+				}
+				storageCommitted += committed
+			}
+		}
+		if len(s.stateObjectsDirty) > 0 {
+			s.stateObjectsDirty = make(map[common.Address]struct{})
+		}
+
+		// Write the account trie changes, measuing the amount of wasted time
+		var start time.Time
+		if metrics.EnabledExpensive {
+			start = time.Now()
+		}
+		// The onleaf func is called _serially_, so we can reuse the same account
+		// for unmarshalling every time.
+		commitRoot, _, err := s.trie.Commit(true)
+		if metrics.EnabledExpensive {
+			s.AccountCommits += time.Since(start)
+
+			accountUpdatedMeter.Mark(int64(s.AccountUpdated))
+			storageUpdatedMeter.Mark(int64(s.StorageUpdated))
+			accountDeletedMeter.Mark(int64(s.AccountDeleted))
+			storageDeletedMeter.Mark(int64(s.StorageDeleted))
+			storageCommittedMeter.Mark(int64(storageCommitted))
+			s.AccountUpdated, s.AccountDeleted = 0, 0
+			s.StorageUpdated, s.StorageDeleted = 0, 0
+		}
+		if err == nil {
+			afterCommit(commitRoot)
+		} else {
+			log.Crit("Aync commit account trie error", "err", err)
+		}
+	}(s)
+	return nil
 }

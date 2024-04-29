@@ -31,7 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/triedb"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
 )
 
@@ -354,10 +354,11 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			gen(i, b)
 		}
 
-		block, err := b.engine.FinalizeAndAssemble(cm, b.header, statedb, b.txs, b.uncles, b.receipts, b.withdrawals)
+		block, receipts, err := b.engine.FinalizeAndAssemble(cm, b.header, statedb, b.txs, b.uncles, b.receipts, b.withdrawals)
 		if err != nil {
 			panic(err)
 		}
+		b.receipts = receipts
 
 		// Write state changes to db
 		root, err := statedb.Commit(b.header.Number.Uint64(), config.IsEIP158(b.header.Number))

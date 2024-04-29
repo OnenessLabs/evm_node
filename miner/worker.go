@@ -89,11 +89,12 @@ type environment struct {
 	gasPool  *core.GasPool  // available gas used to pack transactions
 	coinbase common.Address
 
-	header   *types.Header
-	txs      []*types.Transaction
-	receipts []*types.Receipt
-	sidecars []*types.BlobTxSidecar
-	blobs    int
+	header       *types.Header
+	txs          []*types.Transaction
+	receipts     []*types.Receipt
+	sidecars     []*types.BlobTxSidecar
+	blobs        int
+	accessFilter vm.EvmAccessFilter
 }
 
 // copy creates a deep copy of environment.
@@ -179,6 +180,9 @@ type worker struct {
 	eth         Backend
 	chain       *core.BlockChain
 
+	chaosEngine   consensus.ChaosEngine
+	isChaosEngine bool
+
 	// Feeds
 	pendingLogsFeed event.Feed
 
@@ -243,10 +247,13 @@ type worker struct {
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
+	chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine)
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
 		engine:             engine,
+		isChaosEngine:      isChaosEngine,
+		chaosEngine:        chaosEngine,
 		eth:                eth,
 		chain:              eth.BlockChain(),
 		mux:                mux,
@@ -809,6 +816,14 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
+	if w.current.gasPool == nil {
+		if w.isChaosEngine {
+			w.current.gasPool = new(core.GasPool).AddGas(w.chaosEngine.CalculateGasPool(w.current.header))
+		} else {
+			w.current.gasPool = new(core.GasPool).AddGas(gasLimit)
+		}
+	}
+
 	var coalescedLogs []*types.Log
 
 	for {
@@ -881,6 +896,15 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 			log.Trace("Ignoring replay protected transaction", "hash", ltx.Hash, "eip155", w.chainConfig.EIP155Block)
 			txs.Pop()
 			continue
+		}
+		// consensus related validation
+		if w.isChaosEngine {
+			err := w.chaosEngine.FilterTx(from, tx, w.current.header, w.current.state)
+			if err != nil {
+				log.Trace("Ignoring consensus invalid transaction", "hash", tx.Hash().String(), "from", from.String(), "to", tx.To(), "err", err)
+				txs.Pop()
+				continue
+			}
 		}
 		// Start executing the transaction
 		env.state.SetTxContext(tx.Hash(), env.tcount)
@@ -1010,6 +1034,13 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 		log.Error("Failed to create sealing context", "err", err)
 		return nil, err
 	}
+	if w.isChaosEngine {
+		if err := w.chaosEngine.PreHandle(w.chain, header, env.state); err != nil {
+			log.Error("Failed to apply system contract upgrade", "err", err)
+			return nil, err
+		}
+		env.accessFilter = w.chaosEngine.CreateEvmAccessFilter(header, env.state)
+	}
 	if header.ParentBeaconRoot != nil {
 		context := core.NewEVMBlockContext(header, w.chain, nil)
 		vmenv := vm.NewEVM(context, vm.TxContext{}, env.state, w.chainConfig, vm.Config{})
@@ -1096,9 +1127,13 @@ func (w *worker) generateWork(params *generateParams) *newPayloadResult {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(w.newpayloadTimeout))
 		}
 	}
-	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, nil, work.receipts, params.withdrawals)
+	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, nil, work.receipts, params.withdrawals)
 	if err != nil {
 		return &newPayloadResult{err: err}
+	}
+
+	if len(receipts) > 0 {
+		log.Info("Have receipts", receipts)
 	}
 	return &newPayloadResult{
 		block:    block,
@@ -1185,7 +1220,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		// Withdrawals are set to nil here, because this is only called in PoW.
-		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, nil, env.receipts, nil)
+		block, _, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, nil, env.receipts, nil)
 		if err != nil {
 			return err
 		}

@@ -38,9 +38,30 @@ type Account struct {
 	Storage map[common.Hash]common.Hash `json:"storage,omitempty"`
 	Balance *big.Int                    `json:"balance" gencodec:"required"`
 	Nonce   uint64                      `json:"nonce,omitempty"`
+	Init    *Init                       `json:"init,omitempty"`
 
 	// used in tests
 	PrivateKey []byte `json:"secretKey,omitempty"`
+}
+
+// InitArgs represents the args of system contracts inital args
+type Init struct {
+	Admin           common.Address  `json:"admin,omitempty"`
+	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
+	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
+	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
+	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
+	PeriodTime      *big.Int        `json:"periodTime,omitempty"`
+	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
+}
+
+// LockedAccount represents the info of the locked account
+type LockedAccount struct {
+	UserAddress  common.Address `json:"userAddress,omitempty"`
+	TypeId       *big.Int       `json:"typeId,omitempty"`
+	LockedAmount *big.Int       `json:"lockedAmount,omitempty"`
+	LockedTime   *big.Int       `json:"lockedTime,omitempty"`
+	PeriodAmount *big.Int       `json:"periodAmount,omitempty"`
 }
 
 type accountMarshaling struct {

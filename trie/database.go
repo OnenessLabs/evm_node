@@ -14,20 +14,20 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package triedb
+package trie
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/database"
+	"github.com/ethereum/go-ethereum/trie/hashdb"
+	"github.com/ethereum/go-ethereum/trie/pathdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 	"github.com/ethereum/go-ethereum/trie/triestate"
-	"github.com/ethereum/go-ethereum/triedb/database"
-	"github.com/ethereum/go-ethereum/triedb/hashdb"
-	"github.com/ethereum/go-ethereum/triedb/pathdb"
 )
 
 // Config defines all necessary options for database.
@@ -86,6 +86,13 @@ type Database struct {
 	diskdb    ethdb.Database // Persistent database to store the snapshot
 	preimages *preimageStore // The store for caching preimages
 	backend   backend        // The backend for managing trie nodes
+
+	// Cache derived from `dirtyHashCache` when begin async committing,
+	// used as database when processing block while its parent block's state is still commtting
+	flushedHashCache *HashCache
+
+	flushLatch sync.WaitGroup
+	lock       sync.RWMutex
 }
 
 // NewDatabase initializes the trie database with default settings, note
@@ -115,7 +122,7 @@ func NewDatabase(diskdb ethdb.Database, config *Config) *Database {
 			// TODO define verkle resolver
 			log.Crit("Verkle node resolver is not defined")
 		} else {
-			resolver = trie.MerkleResolver{}
+			resolver = MerkleResolver{}
 		}
 		db.backend = hashdb.New(diskdb, config.HashDB, resolver)
 	}
@@ -270,7 +277,7 @@ func (db *Database) Recover(target common.Hash) error {
 		// TODO define verkle loader
 		log.Crit("Verkle loader is not defined")
 	} else {
-		loader = trie.NewMerkleLoader(db)
+		loader = NewMerkleLoader(db)
 	}
 	return pdb.Recover(target, loader)
 }
@@ -335,4 +342,82 @@ func (db *Database) SetBufferSize(size int) error {
 // IsVerkle returns the indicator if the database is holding a verkle tree.
 func (db *Database) IsVerkle() bool {
 	return db.config.IsVerkle
+}
+
+// DiskDB retrieves the persistent storage backing the trie database.
+func (db *Database) DiskDB() ethdb.KeyValueStore {
+	return db.diskdb
+}
+
+// WaitAndPrepareNextCommit waits for the last async state committing to finish, and move data
+// from trieNode hashCache of trie to flushedHashCache, preparing for the next async state committing
+// note that async state committing must be revoked after calling this method, or it will
+// be blocked forever
+func (db *Database) WaitAndPrepareNextCommit(dirties *HashCache) {
+	db.flushLatch.Wait()
+	db.flushLatch.Add(1)
+	db.lock.Lock()
+	defer db.lock.Unlock()
+	db.flushedHashCache = dirties
+}
+
+// Cache used to store <hash, trie> nodes while hashing the trie
+type HashCache struct {
+	inner map[common.Hash]Node
+	lock  sync.RWMutex
+}
+
+// NewHashCache creates HashCache
+func NewHashCache() *HashCache {
+	return &HashCache{inner: make(map[common.Hash]Node)}
+}
+
+// Contains checks whether the key was cached
+func (c *HashCache) Contains(key []byte) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	_, exist := c.inner[common.BytesToHash(key)]
+	return exist
+}
+
+// Put writes <key, value> to cache with lock protection
+func (c *HashCache) Put(key []byte, value Node) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.inner[common.BytesToHash(key)] = value
+}
+
+// Put writes <key, value> to cache with lock protection
+func (c *HashCache) PutIfAbsent(key []byte, value Node) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	hk := common.BytesToHash(key)
+	if _, ok := c.inner[hk]; !ok {
+		c.inner[hk] = value
+	}
+}
+
+// Get reads value of given key from cache with lock protection
+func (c *HashCache) Get(key common.Hash) (Node, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	node, e := c.inner[key]
+	return node, e
+}
+
+// node retrieves a cached trie node from memory, or returns nil if none can be
+// found in the memory cache.
+func (db *Database) Node(hash common.Hash) Node {
+	// Content unavailable in memory, attempt to retrieve from disk
+	enc, err := db.diskdb.Get(hash[:])
+	if err != nil || enc == nil {
+		return nil
+	}
+
+	return MustDecodeNode(hash[:], enc)
+}
+
+// DoneAsyncCommit marks the async state committing to finish
+func (db *Database) DoneAsyncCommit() {
+	db.flushLatch.Done()
 }

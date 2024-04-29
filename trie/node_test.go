@@ -48,7 +48,7 @@ func TestDecodeNestedNode(t *testing.T) {
 	rlp.Encode(buf, fullNodeData)
 
 	if _, err := decodeNode([]byte("testdecode"), buf.Bytes()); err != nil {
-		t.Fatalf("decode nested full node err: %v", err)
+		t.Fatalf("decode nested full Node err: %v", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestDecodeFullNode(t *testing.T) {
 
 	_, err := decodeNode([]byte("testdecode"), buf.Bytes())
 	if err != nil {
-		t.Fatalf("decode full node err: %v", err)
+		t.Fatalf("decode full Node err: %v", err)
 	}
 }
 
@@ -147,7 +147,7 @@ func BenchmarkDecodeShortNode(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		mustDecodeNode(hash, blob)
+		MustDecodeNode(hash, blob)
 	}
 }
 
@@ -189,7 +189,7 @@ func BenchmarkDecodeFullNode(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		mustDecodeNode(hash, blob)
+		MustDecodeNode(hash, blob)
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"math/big"
 	"strings"
 
@@ -36,12 +37,16 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/triedb"
-	"github.com/ethereum/go-ethereum/triedb/pathdb"
+	"github.com/ethereum/go-ethereum/trie/pathdb"
 	"github.com/holiman/uint256"
 )
 
 //go:generate go run github.com/fjl/gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
+//go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
+//go:generate gencodec -type GenesisAccount -field-override genesisAccountMarshaling -out gen_genesis_account.go
+//go:generate gencodec -type Init -field-override initMarshaling -out gen_genesis_init.go
+//go:generate gencodec -type LockedAccount -field-override lockedAccountMarshaling -out gen_genesis_locked_account.go
+//go:generate gencodec -type ValidatorInfo -field-override validatorInfoMarshaling -out gen_genesis_validator_info.go
 
 var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
@@ -50,6 +55,15 @@ type GenesisAccount = types.Account
 
 // Deprecated: use types.GenesisAlloc instead.
 type GenesisAlloc = types.GenesisAlloc
+
+// ValidatorInfo represents the info of inital validators
+type ValidatorInfo struct {
+	Address          common.Address `json:"address"         gencodec:"required"`
+	Manager          common.Address `json:"manager"         gencodec:"required"`
+	Rate             *big.Int       `json:"rate,omitempty"`
+	Stake            *big.Int       `json:"stake,omitempty"`
+	AcceptDelegation bool           `json:"acceptDelegation,omitempty"`
+}
 
 // Genesis specifies the header fields, state of a genesis block. It also defines hard
 // fork switch-over blocks through the chain configuration.
@@ -63,6 +77,7 @@ type Genesis struct {
 	Mixhash    common.Hash         `json:"mixHash"`
 	Coinbase   common.Address      `json:"coinbase"`
 	Alloc      types.GenesisAlloc  `json:"alloc"      gencodec:"required"`
+	Validators []ValidatorInfo     `json:"validators"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -316,6 +331,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	if head == nil {
 		return newcfg, stored, errors.New("missing head header")
 	}
+	// Check whether consensus config of Chaos is changed
+	if !storedcfg.IsChaosCompatible(newcfg) {
+		return nil, common.Hash{}, errors.New("ChaosConfig is not compatiable with stored")
+	}
 	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time)
 	if compatErr != nil && ((head.Number.Uint64() != 0 && compatErr.RewindToBlock != 0) || (head.Time != 0 && compatErr.RewindToTime != 0)) {
 		return newcfg, stored, compatErr
@@ -373,7 +392,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	case ghash == params.GoerliGenesisHash:
 		return params.GoerliChainConfig
 	default:
-		return params.AllEthashProtocolChanges
+		return params.AllChaosProtocolChanges
 	}
 }
 
@@ -389,6 +408,22 @@ func (g *Genesis) ToBlock() *types.Block {
 	if err != nil {
 		panic(err)
 	}
+	var config *triedb.Config
+	if g.IsVerkle() {
+		config = &triedb.Config{
+			PathDB:   pathdb.Defaults,
+			IsVerkle: true,
+		}
+	}
+
+	db := state.NewDatabaseWithConfig(rawdb.NewMemoryDatabase(), config)
+
+	statedb, err := state.New(types.EmptyRootHash, db, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
 		Nonce:      types.EncodeNonce(g.Nonce),
@@ -416,6 +451,7 @@ func (g *Genesis) ToBlock() *types.Block {
 			head.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
 		}
 	}
+
 	var withdrawals []*types.Withdrawal
 	if conf := g.Config; conf != nil {
 		num := big.NewInt(int64(g.Number))
@@ -439,6 +475,26 @@ func (g *Genesis) ToBlock() *types.Block {
 			}
 		}
 	}
+	// Handle the Chaos related
+	if g.Config != nil && g.Config.Chaos != nil {
+		// init system contract
+		gInit := &genesisInit{statedb, head, g}
+		for name, initSystemContract := range map[string]func() error{
+			"Staking":       gInit.initStaking,
+			"CommunityPool": gInit.initCommunityPool,
+			"BonusPool":     gInit.initBonusPool,
+			"GenesisLock":   gInit.initGenesisLock,
+		} {
+			if err = initSystemContract(); err != nil {
+				log.Crit("Failed to init system contract", "contract", name, "err", err)
+			}
+		}
+		// Set validoter info
+		if head.Extra, err = gInit.initValidators(); err != nil {
+			log.Crit("Failed to init Validators", "err", err)
+		}
+	}
+
 	return types.NewBlock(head, nil, nil, nil, trie.NewStackTrie(nil)).WithWithdrawals(withdrawals)
 }
 
@@ -595,4 +651,29 @@ func decodePrealloc(data string) types.GenesisAlloc {
 		ga[common.BigToAddress(account.Addr)] = acc
 	}
 	return ga
+}
+
+// BasicChaosGenesisBlock returns a genesis containing basic allocation for Chais engine,
+func BasicChaosGenesisBlock(config *params.ChainConfig, initialValidators []common.Address, faucet common.Address) *Genesis {
+	extraVanity := 32
+	extraData := make([]byte, extraVanity+65)
+	alloc := decodePrealloc(basicAllocForChaos)
+	if (faucet != common.Address{}) {
+		// 100M
+		b, _ := new(big.Int).SetString("100000000000000000000000000", 10)
+		alloc[faucet] = GenesisAccount{Balance: b}
+	}
+	validators := make([]ValidatorInfo, 0, len(initialValidators))
+	for _, val := range initialValidators {
+		validators = append(validators, ValidatorInfo{val, faucet, big.NewInt(20), big.NewInt(50000), true})
+	}
+	alloc[system.StakingContract].Init.Admin = faucet
+	return &Genesis{
+		Config:     config,
+		ExtraData:  extraData,
+		GasLimit:   0x280de80,
+		Difficulty: big.NewInt(2),
+		Alloc:      alloc,
+		Validators: validators,
+	}
 }

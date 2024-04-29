@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 	"github.com/ethereum/go-ethereum/trie/utils"
-	"github.com/ethereum/go-ethereum/triedb"
 )
 
 const (
@@ -51,6 +50,9 @@ const (
 type Database interface {
 	// OpenTrie opens the main account trie.
 	OpenTrie(root common.Hash) (Trie, error)
+
+	// OpenTrieWithCache opens the main account trie with hash cache.
+	OpenTrieWithCache(root common.Hash, dirtyTrieNodes *triedb.HashCache) (Trie, error)
 
 	// OpenStorageTrie opens the storage trie of an account.
 	OpenStorageTrie(stateRoot common.Hash, address common.Address, root common.Hash, trie Trie) (Trie, error)
@@ -263,4 +265,13 @@ func (db *cachingDB) DiskDB() ethdb.KeyValueStore {
 // TrieDB retrieves any intermediate trie-node caching layer.
 func (db *cachingDB) TrieDB() *triedb.Database {
 	return db.triedb
+}
+
+// OpenTrie opens the main account trie at a specific root hash.
+func (db *cachingDB) OpenTrieWithCache(root common.Hash, dirtyTrieNodes *triedb.HashCache) (Trie, error) {
+	tr, err := trie.NewSecureWithCache(root, db.triedb, dirtyTrieNodes)
+	if err != nil {
+		return nil, err
+	}
+	return tr, nil
 }

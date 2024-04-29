@@ -118,6 +118,36 @@ web3._extend({
 });
 `
 
+const ChaosJs = `
+web3._extend({
+	property: 'chaos',
+	methods: [
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'chaos_getSnapshot',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'chaos_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getValidators',
+			call: 'chaos_getValidators',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getValidatorsAtHash',
+			call: 'chaos_getValidatorsAtHash',
+			params: 1
+		}),
+	]
+});
+`
+
 const AdminJs = `
 web3._extend({
 	property: 'admin',

@@ -311,7 +311,7 @@ func TestDistributeBlockFee(t *testing.T) {
 
 	assert.NoError(t, DistributeBlockFee(ctx, fee))
 
-	assert.Equal(t, new(big.Int).Sub(origin, fee), ctx.Statedb.GetBalance(ctx.Header.Coinbase))
+	assert.Equal(t, new(big.Int).Sub(origin.ToBig(), fee), ctx.Statedb.GetBalance(ctx.Header.Coinbase))
 
 	assert.Equal(t, big.NewInt(fee.Int64()/5), ctx.Statedb.GetBalance(system.CommunityPoolContract))
 
@@ -723,7 +723,7 @@ func initCallContext() (*CallContext, error) {
 
 	db := rawdb.NewMemoryDatabase()
 
-	genesisBlock := genesis.ToBlock(db)
+	genesisBlock := genesis.ToBlock()
 
 	header := &types.Header{
 		ParentHash: genesisBlock.Hash(),
@@ -798,11 +798,11 @@ func (c *MockConsensusEngine) Author(header *types.Header) (common.Address, erro
 	return header.Coinbase, nil
 }
 
-func (c *MockConsensusEngine) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, seal bool) error {
+func (c *MockConsensusEngine) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header) error {
 	return nil
 }
 
-func (c *MockConsensusEngine) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+func (c *MockConsensusEngine) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header) (chan<- struct{}, <-chan error) {
 	return make(chan struct{}), make(chan error, len(headers))
 }
 
@@ -814,11 +814,13 @@ func (c *MockConsensusEngine) Prepare(chain consensus.ChainHeaderReader, header 
 	return nil
 }
 
-func (c *MockConsensusEngine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction) error {
+func (c *MockConsensusEngine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB,
+	txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction) error {
 	return nil
 }
 
-func (c *MockConsensusEngine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, []*types.Receipt, error) {
+func (c *MockConsensusEngine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
+	uncles []*types.Header, receipts []*types.Receipt, withdrawals []*types.Withdrawal) (*types.Block, []*types.Receipt, error) {
 	return nil, receipts, nil
 }
 

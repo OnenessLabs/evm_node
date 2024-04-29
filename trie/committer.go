@@ -41,13 +41,13 @@ func newCommitter(nodeset *trienode.NodeSet, tracer *tracer, collectLeaf bool) *
 	}
 }
 
-// Commit collapses a node down into a hash node.
-func (c *committer) Commit(n node) hashNode {
+// Commit collapses a Node down into a hash Node.
+func (c *committer) Commit(n Node) hashNode {
 	return c.commit(nil, n).(hashNode)
 }
 
-// commit collapses a node down into a hash node and returns it.
-func (c *committer) commit(path []byte, n node) node {
+// commit collapses a Node down into a hash Node and returns it.
+func (c *committer) commit(path []byte, n Node) Node {
 	// if this path is clean, use available cached data
 	hash, dirty := n.cache()
 	if hash != nil && !dirty {
@@ -86,13 +86,13 @@ func (c *committer) commit(path []byte, n node) node {
 		return cn
 	default:
 		// nil, valuenode shouldn't be committed
-		panic(fmt.Sprintf("%T: invalid node: %v", n, n))
+		panic(fmt.Sprintf("%T: invalid Node: %v", n, n))
 	}
 }
 
 // commitChildren commits the children of the given fullnode
-func (c *committer) commitChildren(path []byte, n *fullNode) [17]node {
-	var children [17]node
+func (c *committer) commitChildren(path []byte, n *fullNode) [17]Node {
+	var children [17]Node
 	for i := 0; i < 16; i++ {
 		child := n.Children[i]
 		if child == nil {
@@ -106,7 +106,7 @@ func (c *committer) commitChildren(path []byte, n *fullNode) [17]node {
 			continue
 		}
 		// Commit the child recursively and store the "hashed" value.
-		// Note the returned node can be some embedded nodes, so it's
+		// Note the returned Node can be some embedded nodes, so it's
 		// possible the type is not hashNode.
 		children[i] = c.commit(append(path, byte(i)), child)
 	}
@@ -117,32 +117,32 @@ func (c *committer) commitChildren(path []byte, n *fullNode) [17]node {
 	return children
 }
 
-// store hashes the node n and adds it to the modified nodeset. If leaf collection
+// store hashes the Node n and adds it to the modified nodeset. If leaf collection
 // is enabled, leaf nodes will be tracked in the modified nodeset as well.
-func (c *committer) store(path []byte, n node) node {
+func (c *committer) store(path []byte, n Node) Node {
 	// Larger nodes are replaced by their hash and stored in the database.
 	var hash, _ = n.cache()
 
-	// This was not generated - must be a small node stored in the parent.
-	// In theory, we should check if the node is leaf here (embedded node
-	// usually is leaf node). But small value (less than 32bytes) is not
+	// This was not generated - must be a small Node stored in the parent.
+	// In theory, we should check if the Node is leaf here (embedded Node
+	// usually is leaf Node). But small value (less than 32bytes) is not
 	// our target (leaves in account trie only).
 	if hash == nil {
-		// The node is embedded in its parent, in other words, this node
+		// The Node is embedded in its parent, in other words, this Node
 		// will not be stored in the database independently, mark it as
-		// deleted only if the node was existent in database before.
+		// deleted only if the Node was existent in database before.
 		_, ok := c.tracer.accessList[string(path)]
 		if ok {
 			c.nodes.AddNode(path, trienode.NewDeleted())
 		}
 		return n
 	}
-	// Collect the dirty node to nodeset for return.
+	// Collect the dirty Node to nodeset for return.
 	nhash := common.BytesToHash(hash)
 	c.nodes.AddNode(path, trienode.New(nhash, nodeToBytes(n)))
 
-	// Collect the corresponding leaf node if it's required. We don't check
-	// full node since it's impossible to store value in fullNode. The key
+	// Collect the corresponding leaf Node if it's required. We don't check
+	// full Node since it's impossible to store value in fullNode. The key
 	// length of leaves should be exactly same.
 	if c.collectLeaf {
 		if sn, ok := n.(*shortNode); ok {
@@ -157,15 +157,15 @@ func (c *committer) store(path []byte, n node) node {
 // MerkleResolver the children resolver in merkle-patricia-tree.
 type MerkleResolver struct{}
 
-// ForEach implements childResolver, decodes the provided node and
+// ForEach implements childResolver, decodes the provided Node and
 // traverses the children inside.
 func (resolver MerkleResolver) ForEach(node []byte, onChild func(common.Hash)) {
 	forGatherChildren(mustDecodeNodeUnsafe(nil, node), onChild)
 }
 
-// forGatherChildren traverses the node hierarchy and invokes the callback
+// forGatherChildren traverses the Node hierarchy and invokes the callback
 // for all the hashnode children.
-func forGatherChildren(n node, onChild func(hash common.Hash)) {
+func forGatherChildren(n Node, onChild func(hash common.Hash)) {
 	switch n := n.(type) {
 	case *shortNode:
 		forGatherChildren(n.Val, onChild)
@@ -177,6 +177,6 @@ func forGatherChildren(n node, onChild func(hash common.Hash)) {
 		onChild(common.BytesToHash(n))
 	case valueNode, nil:
 	default:
-		panic(fmt.Sprintf("unknown node type: %T", n))
+		panic(fmt.Sprintf("unknown Node type: %T", n))
 	}
 }

@@ -19,6 +19,8 @@ package txpool
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/state"
 	"math/big"
 	"sync"
 
@@ -75,6 +77,16 @@ type TxPool struct {
 	term chan struct{}           // Termination channel to detect a closed pool
 
 	sync chan chan error // Testing / simulator channel to block until internal reset is done
+
+	txFilter         txFilter      // A specific consensus can use this to do some extra validation to a transaction
+	nextFilterHeader *types.Header // A mock header of next block for transaction filter
+
+	chain BlockChain
+}
+
+type txFilter interface {
+	FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+	CanCreate(state consensus.StateReader, addr common.Address, isContract bool, height *big.Int) bool
 }
 
 // New creates a new transaction pool to gather, sort and filter inbound
@@ -91,6 +103,7 @@ func New(gasTip uint64, chain BlockChain, subpools []SubPool) (*TxPool, error) {
 		quit:         make(chan chan error),
 		term:         make(chan struct{}),
 		sync:         make(chan chan error),
+		chain:        chain,
 	}
 	for i, subpool := range subpools {
 		if err := subpool.Init(gasTip, head, pool.reserver(i, subpool)); err != nil {
@@ -173,6 +186,23 @@ func (p *TxPool) Close() error {
 		return fmt.Errorf("subpool close errors: %v", errs)
 	}
 	return nil
+}
+
+// InitTxFilter sets the extra validator
+func (pool *TxPool) InitTxFilter(v txFilter) {
+	pool.makeFilterHeader(pool.chain.CurrentBlock())
+	pool.txFilter = v
+}
+
+func (pool *TxPool) makeFilterHeader(currHead *types.Header) {
+	next := new(big.Int).Add(currHead.Number, big.NewInt(1))
+	pool.nextFilterHeader = &types.Header{
+		ParentHash: currHead.Hash(),
+		Difficulty: new(big.Int).Set(currHead.Difficulty),
+		Number:     next,
+		GasLimit:   currHead.GasLimit,
+		Time:       currHead.Time + 1,
+	}
 }
 
 // loop is the transaction pool's main event loop, waiting for and reacting to

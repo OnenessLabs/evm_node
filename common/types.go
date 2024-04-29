@@ -253,6 +253,9 @@ func (a Address) Hex() string {
 	return string(a.checksumHex())
 }
 
+// Hash converts an address to a hash by left-padding it with zeros.
+func (a Address) Hash() Hash { return BytesToHash(a[:]) }
+
 // String implements fmt.Stringer.
 func (a Address) String() string {
 	return a.Hex()

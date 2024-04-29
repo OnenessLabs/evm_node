@@ -92,11 +92,15 @@ type Backend interface {
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
 type API struct {
 	backend Backend
+
+	isChaosEngine bool
+	chaosEngine   consensus.ChaosEngine
 }
 
 // NewAPI creates a new API definition for the tracing methods of the Ethereum service.
 func NewAPI(backend Backend) *API {
-	return &API{backend: backend}
+	chaosEngine, isChaosEngine := backend.Engine().(consensus.ChaosEngine)
+	return &API{backend: backend, isChaosEngine: isChaosEngine, chaosEngine: chaosEngine}
 }
 
 // chainContext constructs the context reader which is used by the evm for reading
@@ -203,6 +207,9 @@ type blockTraceResult struct {
 type txTraceTask struct {
 	statedb *state.StateDB // Intermediate state prepped for tracing
 	index   int            // Transaction offset in the block
+
+	isDoubleSignPunishTx bool // Is chaos punish double sign transaction
+	isProposalTxs        bool // Is posa system transaction ?
 }
 
 // TraceChain returns the structured logs created during the execution of EVM
@@ -266,8 +273,13 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 			for task := range taskCh {
 				var (
 					signer   = types.MakeSigner(api.backend.ChainConfig(), task.block.Number(), task.block.Time())
+					header   = task.block.Header()
 					blockCtx = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil)
 				)
+				if api.isChaosEngine {
+					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
+					blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
+				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := core.TransactionToMessage(tx, signer, task.block.BaseFee())
@@ -277,7 +289,25 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 						TxIndex:     i,
 						TxHash:      tx.Hash(),
 					}
-					res, err := api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+					var (
+						res                  interface{}
+						err                  error
+						isDoubleSignPunishTx bool
+						isProposalTxs        bool
+					)
+					if api.isChaosEngine {
+						isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+						isProposalTxs = api.chaosEngine.IsSysTransaction(msg.From(), tx, header)
+
+					}
+					if isDoubleSignPunishTx {
+						res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					} else if isProposalTxs {
+						res, err = api.traceProposalTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					} else {
+						res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+					}
+
 					if err != nil {
 						task.results[i] = &txTraceResult{TxHash: tx.Hash(), Error: err.Error()}
 						log.Warn("Tracing failed", "hash", tx.Hash(), "block", task.block.NumberU64(), "err", err)

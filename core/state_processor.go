@@ -59,7 +59,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
-		receipts    types.Receipts
+		receipts    = make([]*types.Receipt, 0)
 		usedGas     = new(uint64)
 		header      = block.Header()
 		blockHash   = block.Hash()
@@ -71,16 +71,51 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
+	chaosEngine, isChaosEngine := p.engine.(consensus.ChaosEngine)
+
 	var (
 		context = NewEVMBlockContext(header, p.bc, nil)
 		vmenv   = vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg)
 		signer  = types.MakeSigner(p.config, header.Number, header.Time)
 	)
+	if isChaosEngine {
+		if err := chaosEngine.PreHandle(p.bc, header, statedb); err != nil {
+			return nil, nil, 0, err
+		}
+		vmenv.Context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
+	}
+
+	commonTxs := make([]*types.Transaction, 0, len(block.Transactions()))
+	punishTxs := make([]*types.Transaction, 0)
+	proposalTxs := make([]*types.Transaction, 0)
+
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
 	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+		if isChaosEngine {
+			sender, err := types.Sender(signer, tx)
+			if err != nil {
+				return nil, nil, 0, err
+			}
+			if err = chaosEngine.ExtraValidateOfTx(sender, tx, header); err != nil {
+				return nil, nil, 0, err
+			}
+
+			if ok := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); ok {
+				punishTxs = append(punishTxs, tx)
+				continue
+			}
+			if ok := chaosEngine.IsSysTransaction(sender, tx, header); ok {
+				proposalTxs = append(proposalTxs, tx)
+				continue
+			}
+			if err = chaosEngine.FilterTx(sender, tx, header, statedb); err != nil {
+				return nil, nil, 0, err
+			}
+		}
+
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -92,6 +127,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
+		commonTxs = append(commonTxs, tx)
 	}
 	// Fail if Shanghai not enabled and len(withdrawals) is non-zero.
 	withdrawals := block.Withdrawals()
@@ -99,7 +135,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		return nil, nil, 0, errors.New("withdrawals before shanghai")
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), withdrawals)
+	p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs)
 
 	return receipts, allLogs, *usedGas, nil
 }

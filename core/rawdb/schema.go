@@ -133,10 +133,19 @@ var (
 	BloomTrieIndexPrefix = []byte("bltIndex-")
 
 	CliqueSnapshotPrefix = []byte("clique-")
+	ChaosSnapshotPrefix  = []byte("chaos-")
 
 	BestUpdateKey         = []byte("update-")    // bigEndian64(syncPeriod) -> RLP(types.LightClientUpdate)  (nextCommittee only referenced by root hash)
 	FixedCommitteeRootKey = []byte("fixedRoot-") // bigEndian64(syncPeriod) -> committee root hash
 	SyncCommitteeKey      = []byte("committee-") // bigEndian64(syncPeriod) -> serialized committee
+
+	lastAttestPrefix          = []byte("LA")   // lastAttestPrefix + address -> the latest block number that a local validator have given an attestation
+	blockStatusKey            = []byte("BSK")  // blockStatusKey
+	lastBlockStatusKey        = []byte("LBSK") // lastBlockStatusKey
+	lastFinalizedNumKey       = []byte("LFBNK")
+	casperFFGAttestationsKey  = []byte("CFA") // casperFFGAttestationsKey
+	epochCheckBpsKey          = []byte("ECB")
+	violateCasperFFGPunishKey = []byte("VCF")
 
 	preimageCounter    = metrics.NewRegisteredCounter("db/preimage/total", nil)
 	preimageHitCounter = metrics.NewRegisteredCounter("db/preimage/hits", nil)

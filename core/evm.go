@@ -17,6 +17,7 @@
 package core
 
 import (
+	"github.com/modern-go/reflect2"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -73,6 +74,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		BlobBaseFee: blobBaseFee,
 		GasLimit:    header.GasLimit,
 		Random:      random,
+		CanCreate:   GetCanCreateFn(chain),
 	}
 }
 
@@ -138,4 +140,22 @@ func CanTransfer(db vm.StateDB, addr common.Address, amount *uint256.Int) bool {
 func Transfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int) {
 	db.SubBalance(sender, amount)
 	db.AddBalance(recipient, amount)
+}
+
+// GetCanCreateFn returns the checking function used to decide allowance of contract creation
+func GetCanCreateFn(chain ChainContext) vm.CanCreateFunc {
+	if reflect2.IsNil(chain) || chain.Engine() == nil {
+		return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
+			return true
+		}
+	}
+	chaosEngine, isChaosEngine := chain.Engine().(consensus.ChaosEngine)
+	if isChaosEngine {
+		return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
+			return chaosEngine.CanCreate(db, address, isContract, height)
+		}
+	}
+	return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
+		return true
+	}
 }

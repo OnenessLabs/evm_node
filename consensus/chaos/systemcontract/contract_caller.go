@@ -2,6 +2,7 @@ package systemcontract
 
 import (
 	"fmt"
+	"github.com/holiman/uint256"
 	"math"
 	"math/big"
 
@@ -35,7 +36,7 @@ func CallContractWithValue(ctx *CallContext, from common.Address, to *common.Add
 		GasPrice: big.NewInt(0),
 	}, ctx.Statedb, ctx.ChainConfig, vm.Config{})
 
-	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, math.MaxUint64, value)
+	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, math.MaxUint64, uint256.MustFromBig(value))
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	ctx.Statedb.Finalise(true)
@@ -49,7 +50,7 @@ func VMCallContract(evm *vm.EVM, from common.Address, to *common.Address, data [
 	if !ok {
 		log.Crit("Unknown statedb type")
 	}
-	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, gas, big.NewInt(0))
+	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, gas, uint256.MustFromBig(big.NewInt(0)))
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	state.Finalise(true)

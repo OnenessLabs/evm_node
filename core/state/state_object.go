@@ -67,6 +67,13 @@ type stateObject struct {
 	origin   *types.StateAccount // Account original data without any change applied, nil means it was not existent
 	data     types.StateAccount  // Account data with all mutations applied in the scope of block
 
+	// DB error.
+	// State objects are used by the consensus core and VM which are
+	// unable to deal with database-level errors. Any error that occurs
+	// during a database read is memoized here and will eventually be returned
+	// by StateDB.Commit.
+	dbErr error
+
 	// Write caches.
 	trie Trie // storage trie, which becomes non-nil on first access
 	code Code // contract bytecode, which gets set when code is loaded
@@ -543,4 +550,57 @@ func (s *stateObject) Nonce() uint64 {
 
 func (s *stateObject) Root() common.Hash {
 	return s.data.Root
+}
+
+func (s *stateObject) erase() {
+	prevcode := s.Code()
+	s.db.journal.append(eraseChange{
+		account:  &s.address,
+		prevhash: s.CodeHash(),
+		prevcode: prevcode,
+		prevroot: s.data.Root,
+	})
+
+	s.code = []byte{}
+	s.data.CodeHash = emptyCodeHash
+	s.data.Root = emptyRoot
+	s.trie = nil
+	s.dirtyCode = true
+}
+
+func (s *stateObject) revertErase(codeHash common.Hash, code []byte, root common.Hash) {
+	s.code = code
+	s.data.CodeHash = codeHash[:]
+	s.data.Root = root
+	s.getTrie()
+	s.dirtyCode = true
+}
+
+// CommitTrie the storage trie of the object to db.
+// This updates the trie root.
+func (s *stateObject) CommitTrie(db Database) (int, error) {
+	// If nothing changed, don't bother with hashing anything
+	_, err := s.updateTrie()
+	if err != nil {
+		return 0, nil
+	}
+	if s.dbErr != nil {
+		return 0, s.dbErr
+	}
+	// Track the amount of time wasted on committing the storage trie
+	if metrics.EnabledExpensive {
+		defer func(start time.Time) { s.db.StorageCommits += time.Since(start) }(time.Now())
+	}
+	root, committed, err := s.trie.Commit(true)
+	if err == nil {
+		s.data.Root = root
+	}
+	return len(committed.Nodes), err
+}
+
+// setError remembers the first non-nil error it is called with.
+func (s *stateObject) setError(err error) {
+	if s.dbErr == nil {
+		s.dbErr = err
+	}
 }
