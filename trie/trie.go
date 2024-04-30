@@ -45,13 +45,13 @@ var (
 //
 // Trie is not safe for concurrent use.
 type Trie struct {
-	db    *triedb.Database
+	db    *Database
 	root  Node
 	owner common.Hash
 
 	// cache <hash, trieNode> when calculate hash,
 	// use to support read when async commit statedb
-	dirtyNodeCache *triedb.HashCache
+	dirtyNodeCache *HashCache
 
 	// Flag whether the commit operation is already performed. If so the
 	// trie is not usable(latest states is invisible).
@@ -686,13 +686,15 @@ func (t *Trie) Reset() {
 }
 
 // New creates a trie with an existing root node from db with dirty trie node hash cache
-func NewWithCache(root common.Hash, db *triedb.Database, dirtyNodeCache *triedb.HashCache) (*Trie, error) {
+func NewWithCache(root common.Hash, db *Database, dirtyNodeCache *HashCache) (*Trie, error) {
 	if db == nil {
 		panic("trie.New called without a database")
 	}
+
 	trie := &Trie{
 		db:             db,
 		dirtyNodeCache: dirtyNodeCache,
+		tracer:         newTracer(),
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
 		rootnode, err := trie.resolveHash(root[:], nil)

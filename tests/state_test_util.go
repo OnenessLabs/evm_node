@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"strconv"
 	"strings"
@@ -39,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/hashdb"
 	"github.com/ethereum/go-ethereum/trie/pathdb"
 	"github.com/holiman/uint256"
@@ -438,19 +438,19 @@ func vmTestBlockHash(n uint64) common.Hash {
 // StateTestState groups all the state database objects together for use in tests.
 type StateTestState struct {
 	StateDB   *state.StateDB
-	TrieDB    *triedb.Database
+	TrieDB    *trie.Database
 	Snapshots *snapshot.Tree
 }
 
 // MakePreState creates a state containing the given allocation.
 func MakePreState(db ethdb.Database, accounts types.GenesisAlloc, snapshotter bool, scheme string) StateTestState {
-	tconf := &triedb.Config{Preimages: true}
+	tconf := &trie.Config{Preimages: true}
 	if scheme == rawdb.HashScheme {
 		tconf.HashDB = hashdb.Defaults
 	} else {
 		tconf.PathDB = pathdb.Defaults
 	}
-	triedb := triedb.NewDatabase(db, tconf)
+	triedb := trie.NewDatabase(db, tconf)
 	sdb := state.NewDatabaseWithNodeDB(db, triedb)
 	statedb, _ := state.New(types.EmptyRootHash, sdb, nil)
 	for addr, a := range accounts {

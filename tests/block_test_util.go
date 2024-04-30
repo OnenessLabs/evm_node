@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"os"
 	"reflect"
@@ -39,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/hashdb"
 	"github.com/ethereum/go-ethereum/trie/pathdb"
 )
@@ -117,7 +117,7 @@ func (t *BlockTest) Run(snapshotter bool, scheme string, tracer vm.EVMLogger, po
 	// import pre accounts & construct test genesis block & state root
 	var (
 		db    = rawdb.NewMemoryDatabase()
-		tconf = &triedb.Config{
+		tconf = &trie.Config{
 			Preimages: true,
 		}
 	)
@@ -128,7 +128,7 @@ func (t *BlockTest) Run(snapshotter bool, scheme string, tracer vm.EVMLogger, po
 	}
 	// Commit genesis state
 	gspec := t.genesis(config)
-	triedb := triedb.NewDatabase(db, tconf)
+	triedb := trie.NewDatabase(db, tconf)
 	gblock, err := gspec.Commit(db, triedb)
 	if err != nil {
 		return err

@@ -96,10 +96,10 @@ func testMissingNode(t *testing.T, memonly bool, scheme string) {
 	updateString(trie, "120000", "qwerqwerqwerqwerqwerqwerqwerqwer")
 	updateString(trie, "123456", "asdfasdfasdfasdfasdfasdfasdfasdf")
 	root, nodes, _ := trie.Commit(false)
-	triedb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
+	trie.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
 
 	if !memonly {
-		triedb.Commit(root)
+		trie.Commit(root)
 	}
 
 	trie, _ = New(TrieID(root), triedb)
@@ -533,7 +533,7 @@ func runRandTest(rt randTest) error {
 		case opCommit:
 			root, nodes, _ := tr.Commit(true)
 			if nodes != nil {
-				triedb.Update(root, origin, trienode.NewWithNodeSet(nodes))
+				trie.Update(root, origin, trienode.NewWithNodeSet(nodes))
 			}
 			newtr, err := New(TrieID(root), triedb)
 			if err != nil {

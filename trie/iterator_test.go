@@ -482,9 +482,9 @@ func testIteratorContinueAfterSeekError(t *testing.T, memonly bool, scheme strin
 			break
 		}
 	}
-	triedb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
+	trie.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
 	if !memonly {
-		triedb.Commit(root)
+		trie.Commit(root)
 	}
 	var (
 		barNodeBlob []byte
@@ -493,8 +493,8 @@ func testIteratorContinueAfterSeekError(t *testing.T, memonly bool, scheme strin
 	if memonly {
 		tr.reader.banned = map[string]struct{}{string(barNodePath): {}}
 	} else {
-		barNodeBlob = rawdb.ReadTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, triedb.Scheme())
-		rawdb.DeleteTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, triedb.Scheme())
+		barNodeBlob = rawdb.ReadTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, trie.Scheme())
+		rawdb.DeleteTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, trie.Scheme())
 	}
 	// Create a new iterator that seeks to "bars". Seeking can't proceed because
 	// the Node is missing.
@@ -509,7 +509,7 @@ func testIteratorContinueAfterSeekError(t *testing.T, memonly bool, scheme strin
 	if memonly {
 		delete(tr.reader.banned, string(barNodePath))
 	} else {
-		rawdb.WriteTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, barNodeBlob, triedb.Scheme())
+		rawdb.WriteTrieNode(diskdb, common.Hash{}, barNodePath, barNodeHash, barNodeBlob, trie.Scheme())
 	}
 	// Check that iteration produces the right set of values.
 	if err := checkIteratorOrder(testdata1[2:], NewIterator(it)); err != nil {
@@ -556,8 +556,8 @@ func testIteratorNodeBlob(t *testing.T, scheme string) {
 		trie.MustUpdate([]byte(val.k), []byte(val.v))
 	}
 	root, nodes, _ := trie.Commit(false)
-	triedb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
-	triedb.Commit(root)
+	trie.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
+	trie.Commit(root)
 
 	var found = make(map[common.Hash][]byte)
 	trie, _ = New(TrieID(root), triedb)
@@ -574,7 +574,7 @@ func testIteratorNodeBlob(t *testing.T, scheme string) {
 
 	var count int
 	for dbIter.Next() {
-		ok, _, _ := isTrieNode(triedb.Scheme(), dbIter.Key(), dbIter.Value())
+		ok, _, _ := isTrieNode(trie.Scheme(), dbIter.Key(), dbIter.Value())
 		if !ok {
 			continue
 		}

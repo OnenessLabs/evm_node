@@ -151,8 +151,8 @@ type CacheConfig struct {
 }
 
 // triedbConfig derives the configures for trie database.
-func (c *CacheConfig) triedbConfig() *triedb.Config {
-	config := &triedb.Config{Preimages: c.Preimages}
+func (c *CacheConfig) triedbConfig() *trie.Config {
+	config := &trie.Config{Preimages: c.Preimages}
 	if c.StateScheme == rawdb.HashScheme {
 		config.HashDB = &hashdb.Config{
 			CleanCacheSize: c.TrieCleanLimit * 1024 * 1024,
@@ -218,7 +218,7 @@ type BlockChain struct {
 	gcproc        time.Duration                    // Accumulates canonical block processing for trie dumping
 	lastWrite     uint64                           // Last block when the state was flushed
 	flushInterval atomic.Int64                     // Time interval (processing time) after which to flush a state
-	triedb        *triedb.Database                 // The database handler for maintaining trie nodes.
+	triedb        *trie.Database                   // The database handler for maintaining trie nodes.
 	stateCache    state.Database                   // State database to reuse between imports (contains state cache)
 	txIndexer     *txIndexer                       // Transaction indexer, might be nil if not enabled
 
@@ -294,7 +294,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		cacheConfig = defaultCacheConfig
 	}
 	// Open trie database with provided config
-	triedb := triedb.NewDatabase(db, cacheConfig.triedbConfig())
+	triedb := trie.NewDatabase(db, cacheConfig.triedbConfig())
 
 	// Setup the genesis block, commit the provided genesis specification
 	// to database if the genesis block is not present yet, or load the

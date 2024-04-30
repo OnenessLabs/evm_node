@@ -58,10 +58,10 @@ func makeTestTrie(scheme string) (ethdb.Database, *testDb, *StateTrie, map[strin
 		}
 	}
 	root, nodes, _ := trie.Commit(false)
-	if err := triedb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes)); err != nil {
+	if err := trie.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes)); err != nil {
 		panic(fmt.Errorf("failed to commit db %v", err))
 	}
-	if err := triedb.Commit(root); err != nil {
+	if err := trie.Commit(root); err != nil {
 		panic(err)
 	}
 	// Re-create the trie based on the new state

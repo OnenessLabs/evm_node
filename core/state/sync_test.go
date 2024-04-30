@@ -41,16 +41,16 @@ type testAccount struct {
 }
 
 // makeTestState create a sample test state to test node-wise reconstruction.
-func makeTestState(scheme string) (ethdb.Database, Database, *triedb.Database, common.Hash, []*testAccount) {
+func makeTestState(scheme string) (ethdb.Database, Database, *trie.Database, common.Hash, []*testAccount) {
 	// Create an empty state
-	config := &triedb.Config{Preimages: true}
+	config := &trie.Config{Preimages: true}
 	if scheme == rawdb.PathScheme {
 		config.PathDB = pathdb.Defaults
 	} else {
 		config.HashDB = hashdb.Defaults
 	}
 	db := rawdb.NewMemoryDatabase()
-	nodeDb := triedb.NewDatabase(db, config)
+	nodeDb := trie.NewDatabase(db, config)
 	sdb := NewDatabaseWithNodeDB(db, nodeDb)
 	state, _ := New(types.EmptyRootHash, sdb, nil)
 
@@ -87,7 +87,7 @@ func makeTestState(scheme string) (ethdb.Database, Database, *triedb.Database, c
 // checkStateAccounts cross references a reconstructed state with an expected
 // account array.
 func checkStateAccounts(t *testing.T, db ethdb.Database, scheme string, root common.Hash, accounts []*testAccount) {
-	var config triedb.Config
+	var config trie.Config
 	if scheme == rawdb.PathScheme {
 		config.PathDB = pathdb.Defaults
 	}
@@ -114,7 +114,7 @@ func checkStateAccounts(t *testing.T, db ethdb.Database, scheme string, root com
 
 // checkStateConsistency checks that all data of a state root is present.
 func checkStateConsistency(db ethdb.Database, scheme string, root common.Hash) error {
-	config := &triedb.Config{Preimages: true}
+	config := &trie.Config{Preimages: true}
 	if scheme == rawdb.PathScheme {
 		config.PathDB = pathdb.Defaults
 	}
@@ -130,8 +130,8 @@ func checkStateConsistency(db ethdb.Database, scheme string, root common.Hash) e
 
 // Tests that an empty state is not scheduled for syncing.
 func TestEmptyStateSync(t *testing.T) {
-	dbA := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
-	dbB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), &triedb.Config{PathDB: pathdb.Defaults})
+	dbA := trie.NewDatabase(rawdb.NewMemoryDatabase(), nil)
+	dbB := trie.NewDatabase(rawdb.NewMemoryDatabase(), &trie.Config{PathDB: pathdb.Defaults})
 
 	sync := NewStateSync(types.EmptyRootHash, rawdb.NewMemoryDatabase(), nil, dbA.Scheme())
 	if paths, nodes, codes := sync.Missing(1); len(paths) != 0 || len(nodes) != 0 || len(codes) != 0 {

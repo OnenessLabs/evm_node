@@ -272,41 +272,41 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 			// Fetch and execute the block trace taskCh
 			for task := range taskCh {
 				var (
-					signer   = types.MakeSigner(api.backend.ChainConfig(), task.block.Number(), task.block.Time())
-					header   = task.block.Header()
-					blockCtx = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil)
+				//signer   = types.MakeSigner(api.backend.ChainConfig(), task.block.Number(), task.block.Time())
+				//header   = task.block.Header()
+				//blockCtx = core.NewEVMBlockContext(task.block.Header(), api.chainContext(ctx), nil)
 				)
-				if api.isChaosEngine {
-					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
-					blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
-				}
+				//if api.isChaosEngine {
+				//	_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
+				//	blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
+				//}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
-					msg, _ := core.TransactionToMessage(tx, signer, task.block.BaseFee())
-					txctx := &Context{
-						BlockHash:   task.block.Hash(),
-						BlockNumber: task.block.Number(),
-						TxIndex:     i,
-						TxHash:      tx.Hash(),
-					}
+					//msg, _ := core.TransactionToMessage(tx, signer, task.block.BaseFee())
+					//txctx := &Context{
+					//	BlockHash:   task.block.Hash(),
+					//	BlockNumber: task.block.Number(),
+					//	TxIndex:     i,
+					//	TxHash:      tx.Hash(),
+					//}
 					var (
-						res                  interface{}
-						err                  error
-						isDoubleSignPunishTx bool
-						isProposalTxs        bool
+						res interface{}
+						err error
+						//isDoubleSignPunishTx bool
+						//isProposalTxs        bool
 					)
-					if api.isChaosEngine {
-						isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
-						isProposalTxs = api.chaosEngine.IsSysTransaction(msg.From(), tx, header)
-
-					}
-					if isDoubleSignPunishTx {
-						res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
-					} else if isProposalTxs {
-						res, err = api.traceProposalTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
-					} else {
-						res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
-					}
+					//if api.isChaosEngine {
+					//	isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+					//	isProposalTxs = api.chaosEngine.IsSysTransaction(msg.From(), tx, header)
+					//
+					//}
+					//if isDoubleSignPunishTx {
+					//	res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					//} else if isProposalTxs {
+					//	res, err = api.traceProposalTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					//} else {
+					//	res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+					//}
 
 					if err != nil {
 						task.results[i] = &txTraceResult{TxHash: tx.Hash(), Error: err.Error()}

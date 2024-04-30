@@ -406,7 +406,7 @@ func (bc *BlockChain) TxIndexProgress() (TxIndexProgress, error) {
 }
 
 // TrieDB retrieves the low level trie database used for data storage.
-func (bc *BlockChain) TrieDB() *triedb.Database {
+func (bc *BlockChain) TrieDB() *trie.Database {
 	return bc.triedb
 }
 

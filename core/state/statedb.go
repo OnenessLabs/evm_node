@@ -19,7 +19,6 @@ package state
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/trie"
 	"sort"
 	"sync"
 	"time"
@@ -86,7 +85,7 @@ type StateDB struct {
 	accountsOrigin map[common.Address][]byte                 // The original value of mutated accounts in 'slim RLP' encoding
 	storagesOrigin map[common.Address]map[common.Hash][]byte // The original value of mutated slots in prefix-zero trimmed rlp format
 
-	dirtyTrieNodes *triedb.HashCache // use to cache <hash, trieNode> inside a block
+	dirtyTrieNodes *trie.HashCache // use to cache <hash, trieNode> inside a block
 
 	// This map holds 'live' objects, which will get modified while processing
 	// a state transition.
@@ -157,7 +156,7 @@ type StateDB struct {
 
 // New creates a new state from a given trie.
 func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) {
-	dirtyHashCache := triedb.NewHashCache()
+	dirtyHashCache := trie.NewHashCache()
 	tr, err := db.OpenTrieWithCache(root, dirtyHashCache)
 	if err != nil {
 		return nil, err

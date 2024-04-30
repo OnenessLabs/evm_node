@@ -112,7 +112,7 @@ type Ethereum struct {
 func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if config.SyncMode == downloader.LightSync {
-		return nil, errors.New("can't run eth.Ethereum in light sync mode, light mode has been deprecated")
+		return nil, errors.New("can't run ethereum.Ethereum in light sync mode, light mode has been deprecated")
 	}
 	if !config.SyncMode.IsValid() {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
@@ -133,7 +133,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
 	// Assemble the Ethereum object
-	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if networkID == 0 {
 		networkID = chainConfig.ChainID.Uint64()
 	}
-	eth := &Ethereum{
+	ethereum := &Ethereum{
 		config:            config,
 		merger:            consensus.NewMerger(chainDb),
 		chainDb:           chainDb,
@@ -176,7 +176,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
 	}
-	eth.chaosEngine, eth.isChaosEngine = eth.engine.(consensus.ChaosEngine)
+	ethereum.chaosEngine, ethereum.isChaosEngine = ethereum.engine.(consensus.ChaosEngine)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
@@ -219,42 +219,43 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideVerkle != nil {
 		overrides.OverrideVerkle = config.OverrideVerkle
 	}
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory)
+	ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides,
+		ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TransactionHistory)
 	if err != nil {
 		return nil, err
 	}
-	eth.bloomIndexer.Start(eth.blockchain)
+	ethereum.bloomIndexer.Start(ethereum.blockchain)
 
 	if config.BlobPool.Datadir != "" {
 		config.BlobPool.Datadir = stack.ResolvePath(config.BlobPool.Datadir)
 	}
-	blobPool := blobpool.New(config.BlobPool, eth.blockchain)
+	blobPool := blobpool.New(config.BlobPool, ethereum.blockchain)
 
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
-	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
+	legacyPool := legacypool.New(config.TxPool, ethereum.blockchain)
 
-	eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, []txpool.SubPool{legacyPool, blobPool})
+	ethereum.txPool, err = txpool.New(config.TxPool.PriceLimit, ethereum.blockchain, []txpool.SubPool{legacyPool, blobPool})
 	if err != nil {
 		return nil, err
 	}
 
 	// do some extra work if consensus engine is chaos.
-	if chaosEngine, ok := eth.engine.(*chaos.Chaos); ok {
+	if chaosEngine, ok := ethereum.engine.(*chaos.Chaos); ok {
 		// set chain & state fn
-		chaosEngine.SetChain(eth.blockchain)
-		chaosEngine.SetStateFn(eth.blockchain.StateAt)
+		chaosEngine.SetChain(ethereum.blockchain)
+		chaosEngine.SetStateFn(ethereum.blockchain.StateAt)
 
 		// set consensus-related transaction validator
-		eth.txPool.InitTxFilter(chaosEngine)
+		ethereum.txPool.InitTxFilter(chaosEngine)
 
 		// Init RewardsUpdatePeroid
-		currState, err := eth.blockchain.State()
+		currState, err := ethereum.blockchain.State()
 		if err != nil {
 			return nil, err
 		}
-		if err = chaosEngine.InitRewardsUpdatePeroid(eth.blockchain, currState); err != nil {
+		if err = chaosEngine.InitRewardsUpdatePeroid(ethereum.blockchain, currState); err != nil {
 			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
 			return nil, err
 		}
@@ -262,56 +263,56 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
-	if eth.handler, err = newHandler(&handlerConfig{
+	if ethereum.handler, err = newHandler(&handlerConfig{
 		Database:       chainDb,
-		Chain:          eth.blockchain,
-		TxPool:         eth.txPool,
-		Merger:         eth.merger,
+		Chain:          ethereum.blockchain,
+		TxPool:         ethereum.txPool,
+		Merger:         ethereum.merger,
 		Network:        networkID,
 		Sync:           config.SyncMode,
 		BloomCache:     uint64(cacheLimit),
-		EventMux:       eth.eventMux,
+		EventMux:       ethereum.eventMux,
 		RequiredBlocks: config.RequiredBlocks,
 	}); err != nil {
 		return nil, err
 	}
 
-	eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
-	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+	ethereum.miner = miner.New(ethereum, &config.Miner, ethereum.blockchain.Config(), ethereum.EventMux(), ethereum.engine, ethereum.isLocalBlock)
+	ethereum.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
-	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
-	if eth.APIBackend.allowUnprotectedTxs {
+	ethereum.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, ethereum, nil}
+	if ethereum.APIBackend.allowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
 	}
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.Miner.GasPrice
 	}
-	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
+	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
 
 	// Setup DNS discovery iterators.
 	dnsclient := dnsdisc.NewClient(dnsdisc.Config{})
-	eth.ethDialCandidates, err = dnsclient.NewIterator(eth.config.EthDiscoveryURLs...)
+	ethereum.ethDialCandidates, err = dnsclient.NewIterator(ethereum.config.EthDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
-	eth.snapDialCandidates, err = dnsclient.NewIterator(eth.config.SnapDiscoveryURLs...)
+	ethereum.snapDialCandidates, err = dnsclient.NewIterator(ethereum.config.SnapDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Start the RPC service
-	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, networkID)
+	ethereum.netRPCService = ethapi.NewNetAPI(ethereum.p2pServer, networkID)
 
 	// Register the backend on the node
-	stack.RegisterAPIs(eth.APIs())
-	stack.RegisterProtocols(eth.Protocols())
-	stack.RegisterLifecycle(eth)
+	stack.RegisterAPIs(ethereum.APIs())
+	stack.RegisterProtocols(ethereum.Protocols())
+	stack.RegisterLifecycle(ethereum)
 
 	// Successful startup; push a marker and check previous unclean shutdowns.
-	eth.shutdownTracker.MarkStartup()
+	ethereum.shutdownTracker.MarkStartup()
 
-	return eth, nil
+	return ethereum, nil
 }
 
 func makeExtraData(extra []byte) []byte {

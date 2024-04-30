@@ -212,7 +212,7 @@ type BlockChain interface {
 
 	// TrieDB retrieves the low level trie database used for interacting
 	// with trie nodes.
-	TrieDB() *triedb.Database
+	TrieDB() *trie.Database
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.

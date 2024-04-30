@@ -44,9 +44,14 @@ var (
 		Alloc:   types.GenesisAlloc{testAddress: {Balance: big.NewInt(1000000000000000)}},
 		BaseFee: big.NewInt(params.InitialBaseFee),
 	}
-	genesis      = gspec.MustCommit(testdb, triedb.NewDatabase(testdb, triedb.HashDefaults))
+	genesis      = gspec.MustCommit(testdb, trie.NewDatabase(testdb, trie.HashDefaults))
 	unknownBlock = types.NewBlock(&types.Header{Root: types.EmptyRootHash, GasLimit: params.GenesisGasLimit, BaseFee: big.NewInt(params.InitialBaseFee)}, nil, nil, nil, trie.NewStackTrie(nil))
 )
+
+// continousInturn is an emulator for getting continous in turn
+func (f *fetcherTester) continousInturn(blockNumber *big.Int) uint64 {
+	return 1
+}
 
 // makeChain creates a chain of n blocks starting at and including parent.
 // the returned hash chain is ordered head->parent. In addition, every 3rd block
@@ -101,7 +106,7 @@ func newTester(light bool) *fetcherTester {
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, tester.continousInturn)
 	tester.fetcher.Start()
 
 	return tester

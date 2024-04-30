@@ -155,20 +155,20 @@ func checkSnapRoot(t *testing.T, snap *diskLayer, trieRoot common.Hash) {
 
 type testHelper struct {
 	diskdb  ethdb.Database
-	triedb  *triedb.Database
+	triedb  *trie.Database
 	accTrie *trie.StateTrie
 	nodes   *trienode.MergedNodeSet
 }
 
 func newHelper(scheme string) *testHelper {
 	diskdb := rawdb.NewMemoryDatabase()
-	config := &triedb.Config{}
+	config := &trie.Config{}
 	if scheme == rawdb.PathScheme {
 		config.PathDB = &pathdb.Config{} // disable caching
 	} else {
 		config.HashDB = &hashdb.Config{} // disable caching
 	}
-	triedb := triedb.NewDatabase(diskdb, config)
+	triedb := trie.NewDatabase(diskdb, config)
 	accTrie, _ := trie.NewStateTrie(trie.StateTrieID(types.EmptyRootHash), triedb)
 	return &testHelper{
 		diskdb:  diskdb,

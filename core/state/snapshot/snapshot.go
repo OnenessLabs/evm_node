@@ -168,7 +168,7 @@ type Config struct {
 type Tree struct {
 	config Config                   // Snapshots configurations
 	diskdb ethdb.KeyValueStore      // Persistent database to store the snapshot
-	triedb *triedb.Database         // In-memory cache to access the trie through
+	triedb *trie.Database           // In-memory cache to access the trie through
 	layers map[common.Hash]snapshot // Collection of all known layers
 	lock   sync.RWMutex
 
@@ -192,7 +192,7 @@ type Tree struct {
 //     state trie.
 //   - otherwise, the entire snapshot is considered invalid and will be recreated on
 //     a background thread.
-func New(config Config, diskdb ethdb.KeyValueStore, triedb *triedb.Database, root common.Hash) (*Tree, error) {
+func New(config Config, diskdb ethdb.KeyValueStore, triedb *trie.Database, root common.Hash) (*Tree, error) {
 	// Create a new, empty snapshot tree
 	snap := &Tree{
 		config: config,

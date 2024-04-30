@@ -20,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/database"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 )
@@ -76,7 +75,7 @@ func NewStateTrie(id *ID, db database.Database) (*StateTrie, error) {
 
 // NewSecureWithCache creates a trie with an existing root Node from a backing database
 // with dirty trie Node hash cache
-func NewSecureWithCache(root common.Hash, db *triedb.Database, dirtyTrieNodes *triedb.HashCache) (*SecureTrie, error) {
+func NewSecureWithCache(root common.Hash, db *Database, dirtyTrieNodes *HashCache) (*SecureTrie, error) {
 	if db == nil {
 		panic("trie.NewSecure called without a database")
 	}
@@ -84,7 +83,7 @@ func NewSecureWithCache(root common.Hash, db *triedb.Database, dirtyTrieNodes *t
 	if err != nil {
 		return nil, err
 	}
-	return &SecureTrie{trie: *trie}, nil
+	return &SecureTrie{trie: *trie, db: db}, nil
 
 }
 

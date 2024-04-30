@@ -315,7 +315,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	blocks := make(types.Blocks, n)
 	chainReader := &fakeChainReader{config: config, engine: engine, blocks: blocks, first: parent}
 
-	genblock := func(i int, parent *types.Block, triedb *triedb.Database, statedb *state.StateDB) (*types.Block, types.Receipts) {
+	genblock := func(i int, parent *types.Block, triedb *trie.Database, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, cm: cm, parent: parent, statedb: statedb, engine: engine}
 		b.header = cm.makeHeader(parent, statedb, b.engine)
 
@@ -372,7 +372,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	}
 
 	// Forcibly use hash-based state scheme for retaining all nodes in disk.
-	triedb := triedb.NewDatabase(db, triedb.HashDefaults)
+	triedb := trie.NewDatabase(db, trie.HashDefaults)
 	defer triedb.Close()
 
 	for i := 0; i < n; i++ {
@@ -417,7 +417,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 // then generate chain on top.
 func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, gen func(int, *BlockGen)) (ethdb.Database, []*types.Block, []types.Receipts) {
 	db := rawdb.NewMemoryDatabase()
-	triedb := triedb.NewDatabase(db, triedb.HashDefaults)
+	triedb := trie.NewDatabase(db, trie.HashDefaults)
 	defer triedb.Close()
 	_, err := genesis.Commit(db, triedb)
 	if err != nil {
