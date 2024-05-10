@@ -50,6 +50,10 @@ type EthAPIBackend struct {
 	gpo                 *gasprice.Oracle
 }
 
+func NewEthAPIBackend(extRPCEnabled bool, allowUnprotectedTxs bool, eth *Ethereum, gpo *gasprice.Oracle) *EthAPIBackend {
+	return &EthAPIBackend{extRPCEnabled: extRPCEnabled, allowUnprotectedTxs: allowUnprotectedTxs, eth: eth, gpo: gpo}
+}
+
 // ChainConfig returns the active chain configuration.
 func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.blockchain.Config()

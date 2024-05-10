@@ -19,6 +19,8 @@ package core
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
+	contracts "github.com/ethereum/go-ethereum/contracts/onepol"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -59,7 +61,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
-		receipts    types.Receipts
+		receipts    = make([]*types.Receipt, 0)
 		usedGas     = new(uint64)
 		header      = block.Header()
 		blockHash   = block.Hash()
@@ -67,10 +69,23 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		allLogs     []*types.Log
 		gp          = new(GasPool).AddGas(block.GasLimit())
 	)
+	engine := p.engine
+	if cl, ok := engine.(*beacon.Beacon); ok {
+		engine = cl.InnerEngine()
+	}
+
+	pos, isPoS := engine.(consensus.PoS)
+
+	systemTxs := make([]*types.Transaction, 0)
+	generalTxs := make([]*types.Transaction, 0)
+
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)
 	}
+	// Deploy onepol built-in contracts
+	contracts.Deploy(p.config, statedb, block.Number().Uint64())
+
 	var (
 		context = NewEVMBlockContext(header, p.bc, nil)
 		vmenv   = vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg)
@@ -81,6 +96,16 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
+		if isPoS {
+			isSystemTx, err := pos.IsSystemTransaction(tx, block.Header())
+			if err != nil {
+				return nil, nil, 0, err
+			}
+			if isSystemTx {
+				systemTxs = append(systemTxs, tx)
+				continue
+			}
+		}
 		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
@@ -91,6 +116,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 		receipts = append(receipts, receipt)
+		generalTxs = append(generalTxs, tx)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
 	// Fail if Shanghai not enabled and len(withdrawals) is non-zero.
@@ -99,7 +125,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		return nil, nil, 0, errors.New("withdrawals before shanghai")
 	}
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles(), withdrawals)
+	p.engine.Finalize(p.bc, header, statedb, &generalTxs, block.Uncles(), &receipts, &systemTxs, withdrawals, usedGas)
 
 	return receipts, allLogs, *usedGas, nil
 }

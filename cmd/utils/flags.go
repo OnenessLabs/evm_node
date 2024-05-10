@@ -2079,7 +2079,12 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 	if err != nil {
 		Fatalf("%v", err)
 	}
-	engine, err := ethconfig.CreateConsensusEngine(config, chainDb)
+	//APIBackend := eth.NewEthAPIBackend(stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil)
+	//if APIBackend.allowUnprotectedTxs {
+	//	log.Info("Unprotected transactions allowed")
+	//}
+
+	engine, err := ethconfig.CreateConsensusEngine(config, chainDb, nil)
 	if err != nil {
 		Fatalf("%v", err)
 	}

@@ -184,6 +184,10 @@ var (
 		accounts.MimetypeClique,
 		0x02,
 	}
+	ApplicationOnePOL = SigFormat{
+		accounts.MimetypeOnePOL,
+		0x03,
+	}
 	TextPlain = SigFormat{
 		accounts.MimetypeTextPlain,
 		0x45,

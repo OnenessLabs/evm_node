@@ -20,6 +20,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/onepol"
 	"math/big"
 	"runtime"
 	"sync"
@@ -148,10 +149,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb)
-	if err != nil {
-		return nil, err
-	}
+
 	networkID := config.NetworkId
 	if networkID == 0 {
 		networkID = chainConfig.ChainID.Uint64()
@@ -162,7 +160,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		chainDb:           chainDb,
 		eventMux:          stack.EventMux(),
 		accountManager:    stack.AccountManager(),
-		engine:            engine,
 		closeBloomHandler: make(chan struct{}),
 		networkID:         networkID,
 		gasPrice:          config.Miner.GasPrice,
@@ -172,6 +169,17 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		p2pServer:         stack.Server(),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
 	}
+	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
+	if eth.APIBackend.allowUnprotectedTxs {
+		log.Info("Unprotected transactions allowed")
+	}
+
+	engine, err := ethconfig.CreateConsensusEngine(chainConfig, chainDb, ethapi.NewBlockChainAPI(eth.APIBackend))
+	if err != nil {
+		return nil, err
+	}
+	eth.engine = engine
+
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
 	if bcVersion != nil {
@@ -402,6 +410,9 @@ func (s *Ethereum) shouldPreserve(header *types.Header) bool {
 	if _, ok := s.engine.(*clique.Clique); ok {
 		return false
 	}
+	if _, ok := s.engine.(*onepol.OnePOL); ok {
+		return false
+	}
 	return s.isLocalBlock(header)
 }
 
@@ -433,11 +444,16 @@ func (s *Ethereum) StartMining() error {
 			return fmt.Errorf("etherbase missing: %v", err)
 		}
 		var cli *clique.Clique
+		var oas *onepol.OnePOL
 		if c, ok := s.engine.(*clique.Clique); ok {
 			cli = c
+		} else if o, ok := s.engine.(*onepol.OnePOL); ok {
+			oas = o
 		} else if cl, ok := s.engine.(*beacon.Beacon); ok {
 			if c, ok := cl.InnerEngine().(*clique.Clique); ok {
 				cli = c
+			} else if c, ok := cl.InnerEngine().(*onepol.OnePOL); ok {
+				oas = c
 			}
 		}
 		if cli != nil {
@@ -447,6 +463,14 @@ func (s *Ethereum) StartMining() error {
 				return fmt.Errorf("signer missing: %v", err)
 			}
 			cli.Authorize(eb, wallet.SignData)
+		}
+		if oas != nil {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			oas.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

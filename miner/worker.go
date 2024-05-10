@@ -19,6 +19,7 @@ package miner
 import (
 	"errors"
 	"fmt"
+	contracts "github.com/ethereum/go-ethereum/contracts/onepol"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -471,7 +472,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-timer.C:
 			// If sealing is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
-			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
+			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0 ||
+				w.chainConfig.OnePOL == nil || w.chainConfig.OnePOL.Period > 0) {
 				// Short circuit if no new transaction arrives.
 				if w.newTxs.Load() == 0 {
 					timer.Reset(recommit)
@@ -577,7 +579,8 @@ func (w *worker) mainLoop() {
 				// Special case, if the consensus engine is 0 period clique(dev mode),
 				// submit sealing work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
-				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 ||
+					(w.chainConfig.OnePOL != nil && w.chainConfig.OnePOL.Period == 0) {
 					w.commitWork(nil, time.Now().Unix())
 				}
 			}
@@ -754,6 +757,11 @@ func (w *worker) updateSnapshot(env *environment) {
 }
 
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
+	// OnePOL transaction verification
+	if err := core.VerifyTx(tx); err != nil {
+		return nil, err
+	}
+
 	if tx.Type() == types.BlobTxType {
 		return w.commitBlobTransaction(env, tx)
 	}
@@ -1096,10 +1104,11 @@ func (w *worker) generateWork(params *generateParams) *newPayloadResult {
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(w.newpayloadTimeout))
 		}
 	}
-	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, nil, work.receipts, params.withdrawals)
+	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, nil, work.receipts, params.withdrawals)
 	if err != nil {
 		return &newPayloadResult{err: err}
 	}
+	work.receipts = receipts
 	return &newPayloadResult{
 		block:    block,
 		fees:     totalFees(block, work.receipts),
@@ -1132,6 +1141,9 @@ func (w *worker) commitWork(interrupt *atomic.Int32, timestamp int64) {
 	if err != nil {
 		return
 	}
+	// Deploy onepol built-in contracts
+	contracts.Deploy(w.chainConfig, work.state, work.header.Number.Uint64())
+
 	// Fill pending transactions from the txpool into the block.
 	err = w.fillTransactions(interrupt, work)
 	switch {
@@ -1185,15 +1197,15 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		// Withdrawals are set to nil here, because this is only called in PoW.
-		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, nil, env.receipts, nil)
+		block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, nil, env.receipts, nil)
 		if err != nil {
 			return err
 		}
 		// If we're post merge, just ignore
 		if !w.isTTDReached(block.Header()) {
 			select {
-			case w.taskCh <- &task{receipts: env.receipts, state: env.state, block: block, createdAt: time.Now()}:
-				fees := totalFees(block, env.receipts)
+			case w.taskCh <- &task{receipts: receipts, state: env.state, block: block, createdAt: time.Now()}:
+				fees := totalFees(block, receipts)
 				feesInEther := new(big.Float).Quo(new(big.Float).SetInt(fees), big.NewFloat(params.Ether))
 				log.Info("Commit new sealing work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 					"txs", env.tcount, "gas", block.GasUsed(), "fees", feesInEther,

@@ -19,6 +19,8 @@ package ethconfig
 
 import (
 	"errors"
+	"github.com/ethereum/go-ethereum/consensus/onepol"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -164,15 +166,19 @@ type Config struct {
 // CreateConsensusEngine creates a consensus engine for the given chain config.
 // Clique is allowed for now to live standalone, but ethash is forbidden and can
 // only exist on already merged networks.
-func CreateConsensusEngine(config *params.ChainConfig, db ethdb.Database) (consensus.Engine, error) {
+func CreateConsensusEngine(chainConfig *params.ChainConfig, db ethdb.Database, ethAPI *ethapi.BlockChainAPI) (consensus.Engine, error) {
 	// If proof-of-authority is requested, set it up
-	if config.Clique != nil {
-		return beacon.New(clique.New(config.Clique, db)), nil
+	if chainConfig.Clique != nil {
+		return clique.New(chainConfig.Clique, db), nil
+	} else if chainConfig.OnePOL != nil {
+		// If proof-of-stake is requested, set it up
+		return onepol.New(chainConfig, chainConfig.OnePOL, db, ethAPI), nil
 	}
+
 	// If defaulting to proof-of-work, enforce an already merged network since
 	// we cannot run PoW algorithms anymore, so we cannot even follow a chain
 	// not coordinated by a beacon node.
-	if !config.TerminalTotalDifficultyPassed {
+	if !chainConfig.TerminalTotalDifficultyPassed {
 		return nil, errors.New("ethash is only supported as a historical component of already merged networks")
 	}
 	return beacon.New(ethash.NewFaker()), nil

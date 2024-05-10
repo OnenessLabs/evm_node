@@ -937,6 +937,14 @@ func (s *StateDB) SetTxContext(thash common.Hash, ti int) {
 	s.txIndex = ti
 }
 
+// Prepare sets the current transaction hash and index which are
+// used when the EVM emits new state logs.
+func (s *StateDB) PrepareOnePOL(thash common.Hash, ti int) {
+	s.thash = thash
+	s.txIndex = ti
+	s.accessList = newAccessList()
+}
+
 func (s *StateDB) clearJournalAndRefund() {
 	if len(s.journal.entries) > 0 {
 		s.journal = newJournal()

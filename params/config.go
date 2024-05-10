@@ -26,10 +26,12 @@ import (
 
 // Genesis hashes to enforce below configs on.
 var (
-	MainnetGenesisHash = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
-	HoleskyGenesisHash = common.HexToHash("0xb5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4")
-	SepoliaGenesisHash = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
-	GoerliGenesisHash  = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
+	MainnetGenesisHash       = common.HexToHash("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
+	HoleskyGenesisHash       = common.HexToHash("0xb5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4")
+	SepoliaGenesisHash       = common.HexToHash("0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9")
+	GoerliGenesisHash        = common.HexToHash("0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a")
+	OnePOLMainnetGenesisHash = common.HexToHash("0x7027e4041ce0185f45aab280b852d49193f5adb0f728a0cb3846a9c9bbf4b7fe")
+	OnePOLTestnetGenesisHash = common.HexToHash("0xb11d2e6372646124ff853037eb8e93e84a0cc8503e6c505264eade54b8ef281d")
 )
 
 func newUint64(val uint64) *uint64 { return &val }
@@ -306,6 +308,47 @@ var (
 		Ethash:                        new(EthashConfig),
 		Clique:                        nil,
 	}
+
+	OnePOLMainnetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(248),
+		HomesteadBlock:      big.NewInt(0),
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+
+		OnePOL: &OnePOLConfig{
+			Period: 15,
+			Epoch:  5760,
+		},
+	}
+
+	OnePOLTestnetChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(9372),
+		HomesteadBlock:      big.NewInt(0),
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+
+		OnePOL: &OnePOLConfig{
+			Period: 15,
+			Epoch:  5760,
+		},
+	}
+
 	TestRules = TestChainConfig.Rules(new(big.Int), false, 0)
 )
 
@@ -365,6 +408,7 @@ type ChainConfig struct {
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
+	OnePOL *OnePOLConfig `json:"onepol,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -384,6 +428,17 @@ type CliqueConfig struct {
 // String implements the stringer interface, returning the consensus engine details.
 func (c *CliqueConfig) String() string {
 	return "clique"
+}
+
+// OnePOLConfig is the consensus engine configs for proof-of-stake based sealing.
+type OnePOLConfig struct {
+	Period uint64 `json:"period"` // Number of seconds between blocks to enforce
+	Epoch  uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
+}
+
+// String implements the stringer interface, returning the consensus engine details.
+func (o *OnePOLConfig) String() string {
+	return "onepol"
 }
 
 // Description returns a human-readable description of ChainConfig.
@@ -412,6 +467,14 @@ func (c *ChainConfig) Description() string {
 			banner += "Consensus: Beacon (proof-of-stake), merging from Clique (proof-of-authority)\n"
 		} else {
 			banner += "Consensus: Beacon (proof-of-stake), merged from Clique (proof-of-authority)\n"
+		}
+	case c.OnePOL != nil:
+		if c.TerminalTotalDifficulty == nil {
+			banner += "Consensus: OnePOL (proof-of-authority)\n"
+		} else if !c.TerminalTotalDifficultyPassed {
+			banner += "Consensus: Beacon (proof-of-stake), merging from OnePOL (proof-of-authority)\n"
+		} else {
+			banner += "Consensus: Beacon (proof-of-stake), merged from OnePOL (proof-of-authority)\n"
 		}
 	default:
 		banner += "Consensus: unknown\n"
@@ -543,6 +606,44 @@ func (c *ChainConfig) IsLondon(num *big.Int) bool {
 // IsArrowGlacier returns whether num is either equal to the Arrow Glacier (EIP-4345) fork block or greater.
 func (c *ChainConfig) IsArrowGlacier(num *big.Int) bool {
 	return isBlockForked(c.ArrowGlacierBlock, num)
+}
+
+// OnePOLPublicationBlock returns the hard fork of OnePOL.
+func (c *ChainConfig) OnePOLPublicationBlock() *big.Int {
+	if c.OnePOL == nil {
+		return nil
+	}
+	if c.ChainID.Cmp(OnePOLMainnetChainConfig.ChainID) == 0 {
+		return big.NewInt(1529980)
+	}
+	if c.ChainID.Cmp(OnePOLTestnetChainConfig.ChainID) == 0 {
+		return big.NewInt(1519840)
+	}
+	return big.NewInt(2)
+}
+
+// IsOnePOLPublication returns true if num is equal to or greater than the OnePOL Publication fork block.
+func (c *ChainConfig) IsForkedOnePOLPublication(num *big.Int) bool {
+	return isForked(c.OnePOLPublicationBlock(), num)
+}
+
+// OnePOLExtendDifficultyBlock returns the hard fork of OnePOL.
+func (c *ChainConfig) OnePOLExtendDifficultyBlock() *big.Int {
+	if c.OnePOL == nil {
+		return nil
+	}
+	if c.ChainID.Cmp(OnePOLMainnetChainConfig.ChainID) == 0 {
+		return big.NewInt(2093240)
+	}
+	if c.ChainID.Cmp(OnePOLTestnetChainConfig.ChainID) == 0 {
+		return big.NewInt(2082220)
+	}
+	return big.NewInt(2)
+}
+
+// IsForkedOnePOLExtendDifficulty returns true if num is equal to or greater than the OnePOL fork block.
+func (c *ChainConfig) IsForkedOnePOLExtendDifficulty(num *big.Int) bool {
+	return isForked(c.OnePOLExtendDifficultyBlock(), num)
 }
 
 // IsGrayGlacier returns whether num is either equal to the Gray Glacier (EIP-5133) fork block or greater.
@@ -740,6 +841,14 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 		return newTimestampCompatError("Verkle fork timestamp", c.VerkleTime, newcfg.VerkleTime)
 	}
 	return nil
+}
+
+// isForked returns whether a fork scheduled at block s is active at the given head block.
+func isForked(s, head *big.Int) bool {
+	if s == nil || head == nil {
+		return false
+	}
+	return s.Cmp(head) <= 0
 }
 
 // BaseFeeChangeDenominator bounds the amount the base fee can change between blocks.

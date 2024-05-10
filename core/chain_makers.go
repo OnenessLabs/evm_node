@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
+	contracts "github.com/ethereum/go-ethereum/contracts/onepol"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -340,12 +341,15 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		if config.DAOForkSupport && config.DAOForkBlock != nil && config.DAOForkBlock.Cmp(b.header.Number) == 0 {
 			misc.ApplyDAOHardFork(statedb)
 		}
+
+		// Deploy onepol built-in contracts
+		contracts.Deploy(config, statedb, b.header.Number.Uint64())
 		// Execute any user modifications to the block
 		if gen != nil {
 			gen(i, b)
 		}
 
-		block, err := b.engine.FinalizeAndAssemble(cm, b.header, statedb, b.txs, b.uncles, b.receipts, b.withdrawals)
+		block, _, err := b.engine.FinalizeAndAssemble(cm, b.header, statedb, b.txs, b.uncles, b.receipts, b.withdrawals)
 		if err != nil {
 			panic(err)
 		}
@@ -571,4 +575,8 @@ func (cm *chainMaker) GetBlock(hash common.Hash, number uint64) *types.Block {
 
 func (cm *chainMaker) GetTd(hash common.Hash, number uint64) *big.Int {
 	return nil // not supported
+}
+
+func (cm *chainMaker) GetCanonicalHash(number uint64) common.Hash {
+	return common.Hash{}
 }
