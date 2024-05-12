@@ -486,6 +486,10 @@ func (c *OnePOL) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 	// Ensure that the difficulty corresponds to the turn-ness of the validator
 	if !c.fakeDiff {
 		difficulty := scheduler.difficulty(number, validator, c.chainConfig.IsForkedOnePOLExtendDifficulty(header.Number))
+		log.Debug("fakeDiff", "number", header.Number, "hash", header.Hash(),
+			"diff", header.Difficulty, "difficulty", difficulty,
+			"root", header.Root)
+
 		if header.Difficulty.Cmp(difficulty) != 0 {
 			return errWrongDifficulty
 		}
@@ -757,6 +761,9 @@ func (c *OnePOL) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 	var exists bool
 	if number > 0 && env.IsEpoch(number) {
 		result, err := getNextValidators(c.chainConfig, c.ethAPI, header.ParentHash, env.Epoch(number), number)
+		for _, operator := range result.Operators {
+			log.Debug("Validator operator: ", operator)
+		}
 		if err != nil {
 			log.Error("Failed to get validators", "in", "Seal", "hash", header.ParentHash, "number", number, "err", err)
 			return err
