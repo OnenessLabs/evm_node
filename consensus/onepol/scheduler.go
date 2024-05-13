@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"math/rand"
 	"sort"
@@ -98,6 +99,7 @@ func (s *scheduler) expect(number uint64) *common.Address {
 
 func (s *scheduler) difficulty(number uint64, validator common.Address, ext bool) *big.Int {
 	if !ext {
+		log.Debug("difficulty: ", *s.expect(number), validator)
 		if *s.expect(number) == validator {
 			return new(big.Int).Set(diffInTurn)
 		}

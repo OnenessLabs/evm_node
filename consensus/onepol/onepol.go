@@ -485,12 +485,24 @@ func (c *OnePOL) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 
 	// Ensure that the difficulty corresponds to the turn-ness of the validator
 	if !c.fakeDiff {
-		difficulty := scheduler.difficulty(number, validator, c.chainConfig.IsForkedOnePOLExtendDifficulty(header.Number))
-		log.Debug("fakeDiff", "number", header.Number, "hash", header.Hash(),
-			"diff", header.Difficulty, "difficulty", difficulty,
-			"root", header.Root)
-
-		if header.Difficulty.Cmp(difficulty) != 0 {
+		//difficulty := scheduler.difficulty(number, validator, c.chainConfig.IsForkedOnePOLExtendDifficulty(header.Number))
+		//log.Debug("fakeDiff", "number", header.Number, "hash", header.Hash(),
+		//	"diff", header.Difficulty, "difficulty", difficulty,
+		//	"root", header.Root)
+		//
+		//if header.Difficulty.Cmp(difficulty) != 0 {
+		//	return errWrongDifficulty
+		//}
+		// Retrieve the snapshot needed to verify this header and cache it
+		snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+		if err != nil {
+			return err
+		}
+		inturn := snap.inturn(header.Number.Uint64(), validator)
+		if inturn && header.Difficulty.Cmp(diffInTurn) != 0 {
+			return errWrongDifficulty
+		}
+		if !inturn && header.Difficulty.Cmp(diffNoTurn) != 0 {
 			return errWrongDifficulty
 		}
 	}
@@ -547,7 +559,13 @@ func (c *OnePOL) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
 
 	// Add the difficulty
-	header.Difficulty = scheduler.difficulty(number, c.signer, c.chainConfig.IsForkedOnePOLExtendDifficulty(header.Number))
+	//header.Difficulty = scheduler.difficulty(number, c.signer, c.chainConfig.IsForkedOnePOLExtendDifficulty(header.Number))
+
+	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
+	if err != nil {
+		return err
+	}
+	header.Difficulty = calcDifficulty(snap, c.signer)
 
 	// Ensure the timestamp has the correct delay
 	parent := chain.GetHeader(header.ParentHash, number-1)
@@ -560,6 +578,13 @@ func (c *OnePOL) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	return nil
+}
+
+func calcDifficulty(snap *Snapshot, validator common.Address) *big.Int {
+	if snap.inturn(snap.Number+1, validator) {
+		return new(big.Int).Set(diffInTurn)
+	}
+	return new(big.Int).Set(diffNoTurn)
 }
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
@@ -1053,4 +1078,23 @@ func verifyTx(header *types.Header, txs []*types.Transaction) error {
 		}
 	}
 	return nil
+}
+
+// signers retrieves the list of authorized signers in ascending order.
+func (s *Snapshot) signers() []common.Address {
+	sigs := make([]common.Address, 0, len(s.Validators))
+	for sig := range s.Validators {
+		sigs = append(sigs, sig)
+	}
+	sort.Sort(validatorsAscending(sigs))
+	return sigs
+}
+
+// inturn returns if a signer at a given block height is in-turn or not.
+func (s *Snapshot) inturn(number uint64, signer common.Address) bool {
+	signers, offset := s.signers(), 0
+	for offset < len(signers) && signers[offset] != signer {
+		offset++
+	}
+	return (number % uint64(len(signers))) == uint64(offset)
 }
